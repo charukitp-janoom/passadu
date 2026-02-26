@@ -145,6 +145,8 @@
   .hidden  { display:none !important; }
   .mt-8    { margin-top:8px; }
   .text-muted { color:var(--text-muted); font-size:12px; }
+  #photo-input { display:none; }
+  .scan-hint { font-size:12px; color:var(--text-muted); text-align:center; margin-top:8px; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -208,6 +210,7 @@
     <div class="scanner-box">
       <div class="scanner-header">📷 สแกนบาร์โค้ดพัสดุ</div>
 
+      <!-- กล้อง live preview (Android / BarcodeDetector) -->
       <div id="camera-active" class="hidden">
         <div class="camera-wrap">
           <video id="camera-video" autoplay muted playsinline webkit-playsinline></video>
@@ -221,11 +224,22 @@
         </div>
       </div>
 
+      <!-- placeholder ก่อนเปิดกล้อง -->
       <div id="camera-placeholder" class="camera-placeholder">
         <div class="camera-placeholder-icon">📷</div>
-        <div>กดปุ่มด้านล่างเพื่อเปิดกล้องสแกน</div>
+        <div>กดปุ่มด้านล่างเพื่อสแกนบาร์โค้ด</div>
         <div class="text-muted">รองรับ CODE128 · QR Code · EAN และอื่นๆ</div>
       </div>
+
+      <!-- photo preview หลัง capture (iOS fallback) -->
+      <div id="photo-preview-wrap" class="hidden">
+        <div class="camera-wrap" style="background:#111;display:flex;align-items:center;justify-content:center;">
+          <img id="photo-preview-img" style="max-width:100%;max-height:100%;object-fit:contain;" alt="">
+        </div>
+      </div>
+
+      <!-- hidden input สำหรับ iOS capture -->
+      <input type="file" id="photo-input" accept="image/*" capture="environment">
 
       <div id="scan-result-display" class="result-display hidden">
         <div class="result-icon">✅</div>
@@ -238,6 +252,7 @@
     </div>
 
     <button class="btn btn-primary"   id="btn-start-scan"   onclick="startScanning()">📷 เปิดกล้องสแกน</button>
+    <div class="scan-hint" id="scan-hint-text"></div>
     <div style="height:8px"></div>
     <button class="btn btn-secondary" id="btn-manual-entry" onclick="showManualEntry()">⌨️ พิมพ์เลขพัสดุเอง</button>
 
@@ -338,8 +353,9 @@ const state = {
   adminType:      '',
   isScanning:     false,
   stream:         null,
-  rafId:          null,    // requestAnimationFrame ID
-  detector:       null     // BarcodeDetector instance (ถ้า browser รองรับ)
+  rafId:          null,
+  detector:       null,
+  usePhotoMode:   false   // iOS: ถ่ายภาพแล้ว decode
 };
 
 // ============================================================
@@ -371,19 +387,41 @@ async function init() {
     if (state.adminType === 'MAIN_ADMIN') badge.classList.add('main');
     document.getElementById('c-admin').textContent = `${profile.displayName} (${adminLabel})`;
 
-    // ตรวจว่า BarcodeDetector ใช้ได้ไหม (Android Chrome / Samsung Browser)
-    if (typeof BarcodeDetector !== 'undefined') {
-      try {
-        state.detector = new BarcodeDetector({
-          formats: ['code_128','code_39','ean_13','ean_8','qr_code','data_matrix','itf','pdf417']
-        });
-      } catch(e) { state.detector = null; }
-    }
-
+    // ตรวจสอบ capability
+    await detectScannerMode();
     showScreen('main');
   } catch (err) {
     setLoadingText('❌ เชื่อมต่อระบบไม่ได้');
     setTimeout(() => { showScreen('main'); showStatus('error', err.message); }, 1000);
+  }
+}
+
+async function detectScannerMode() {
+  // ลอง BarcodeDetector ก่อน
+  if (typeof BarcodeDetector !== 'undefined') {
+    try {
+      const supported = await BarcodeDetector.getSupportedFormats();
+      if (supported.length > 0) {
+        state.detector = new BarcodeDetector({
+          formats: ['code_128','code_39','ean_13','ean_8','qr_code','data_matrix','itf','pdf417','upc_a','upc_e']
+        });
+        document.getElementById('scan-hint-text').textContent = '';
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // ตรวจว่า getUserMedia ใช้ได้ไหม
+  const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+  if (!hasGetUserMedia) {
+    // iOS LINE browser เก่า — ใช้ photo capture แทน
+    state.usePhotoMode = true;
+    document.getElementById('btn-start-scan').textContent = '📷 ถ่ายภาพบาร์โค้ด';
+    document.getElementById('scan-hint-text').textContent = 'โหมดถ่ายภาพ: ถ่ายรูปบาร์โค้ดให้ชัดแล้วระบบจะอ่านให้อัตโนมัติ';
+  } else {
+    // มี getUserMedia แต่ไม่มี BarcodeDetector — ใช้ live + canvas decode
+    document.getElementById('scan-hint-text').textContent = '';
   }
 }
 
@@ -404,9 +442,20 @@ function showScreen(name) {
 function setLoadingText(t) { document.getElementById('loading-text').textContent = t; }
 
 // ============================================================
-// SCANNER — ใช้ native getUserMedia + BarcodeDetector / canvas loop
+// SCANNER — เลือก mode ตาม capability
 // ============================================================
-async function startScanning() {
+function startScanning() {
+  if (state.usePhotoMode) {
+    startPhotoMode();
+  } else {
+    startLiveCamera();
+  }
+}
+
+// ============================================================
+// MODE A: LIVE CAMERA (Android BarcodeDetector / getUserMedia)
+// ============================================================
+async function startLiveCamera() {
   try {
     document.getElementById('camera-placeholder').classList.add('hidden');
     document.getElementById('camera-active').classList.remove('hidden');
@@ -415,7 +464,6 @@ async function startScanning() {
     btn.onclick = stopScanning;
     document.getElementById('btn-manual-entry').classList.add('hidden');
 
-    // ขอ camera stream
     state.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false
@@ -423,218 +471,79 @@ async function startScanning() {
 
     const video = document.getElementById('camera-video');
     video.srcObject = state.stream;
-    await new Promise(resolve => { video.onloadedmetadata = resolve; });
     await video.play();
-
     state.isScanning = true;
 
     if (state.detector) {
-      // วิธีที่ 1: BarcodeDetector API (Android Chrome, Samsung)
-      scanWithBarcodeDetector(video);
+      runBarcodeDetector(video);
     } else {
-      // วิธีที่ 2: canvas + ImageData loop (iOS LINE browser fallback)
-      scanWithCanvasLoop(video);
+      runCanvasDecode(video);
     }
-
   } catch (err) {
-    const msg = err.name === 'NotAllowedError'
-      ? 'กรุณาอนุญาตการเข้าถึงกล้องในการตั้งค่า LINE'
-      : err.message;
-    showStatus('error', '❌ ' + msg);
+    // getUserMedia ล้มเหลว → fallback photo mode
+    if (err.name === 'NotAllowedError') {
+      showStatus('error', '❌ กรุณาอนุญาตการเข้าถึงกล้องในการตั้งค่า LINE');
+    } else {
+      // ลอง photo mode แทน
+      state.usePhotoMode = true;
+      document.getElementById('camera-placeholder').classList.remove('hidden');
+      document.getElementById('camera-active').classList.add('hidden');
+      resetScanButtons();
+      document.getElementById('btn-start-scan').textContent = '📷 ถ่ายภาพบาร์โค้ด';
+      document.getElementById('scan-hint-text').textContent = 'เปลี่ยนเป็นโหมดถ่ายภาพแทน';
+      startPhotoMode();
+      return;
+    }
     document.getElementById('camera-placeholder').classList.remove('hidden');
     document.getElementById('camera-active').classList.add('hidden');
     resetScanButtons();
   }
 }
 
-// --- วิธีที่ 1: BarcodeDetector (Chrome/Android) ---
-async function scanWithBarcodeDetector(video) {
+// BarcodeDetector loop
+async function runBarcodeDetector(video) {
   while (state.isScanning) {
     try {
-      const codes = await state.detector.detect(video);
-      if (codes.length > 0 && state.isScanning) {
-        state.isScanning = false;
-        handleScanResult(codes[0].rawValue);
-        stopScanning();
-        return;
+      if (video.readyState >= 2) {
+        const codes = await state.detector.detect(video);
+        if (codes.length > 0) {
+          state.isScanning = false;
+          handleScanResult(codes[0].rawValue);
+          stopScanning();
+          return;
+        }
       }
-    } catch(e) { /* ยังไม่เจอ */ }
-    await new Promise(r => setTimeout(r, 120));
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 100));
   }
 }
 
-// --- วิธีที่ 2: canvas loop + inline barcode decode สำหรับ iOS ---
-function scanWithCanvasLoop(video) {
-  const canvas  = document.getElementById('scan-canvas');
-  const ctx     = canvas.getContext('2d', { willReadFrequently: true });
+// Canvas decode loop
+function runCanvasDecode(video) {
+  const canvas = document.getElementById('scan-canvas');
+  const ctx    = canvas.getContext('2d', { willReadFrequently: true });
+  let lastTime = 0;
 
-  function tick() {
+  function tick(ts) {
     if (!state.isScanning) return;
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width  = video.videoWidth  || 640;
-      canvas.height = video.videoHeight || 480;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // ลองทำ crop เฉพาะแถบกลาง (scan zone) เพื่อประสิทธิภาพ
-      const zoneH = Math.floor(canvas.height * 0.35);
-      const zoneY = Math.floor((canvas.height - zoneH) / 2);
-      const imageData = ctx.getImageData(0, zoneY, canvas.width, zoneH);
-
-      const result = decodeBarcode(imageData.data, canvas.width, zoneH);
-      if (result && state.isScanning) {
-        state.isScanning = false;
-        handleScanResult(result);
-        stopScanning();
-        return;
+    if (ts - lastTime > 200) {
+      lastTime = ts;
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        const result = decodeFromCanvas(canvas, ctx);
+        if (result) {
+          state.isScanning = false;
+          handleScanResult(result);
+          stopScanning();
+          return;
+        }
       }
     }
     state.rafId = requestAnimationFrame(tick);
   }
   state.rafId = requestAnimationFrame(tick);
-}
-
-// --- Inline barcode decoder: CODE128 + simple QR fallback ---
-// decode CODE128 จาก pixel row ตรงกลาง
-function decodeBarcode(data, width, height) {
-  // ลองหลาย row ตรงกลางภาพ
-  const rows = [
-    Math.floor(height * 0.35),
-    Math.floor(height * 0.50),
-    Math.floor(height * 0.65),
-  ];
-  for (const row of rows) {
-    const result = decodeCode128Row(data, width, height, row);
-    if (result) return result;
-  }
-  return null;
-}
-
-function decodeCode128Row(data, width, height, row) {
-  try {
-    // แปลง pixel row เป็น binary string (threshold Otsu-like)
-    const pixels = [];
-    for (let x = 0; x < width; x++) {
-      const idx = (row * width + x) * 4;
-      const gray = (data[idx] * 77 + data[idx+1] * 150 + data[idx+2] * 29) >> 8;
-      pixels.push(gray);
-    }
-
-    // adaptive threshold
-    let sum = 0;
-    for (let i = 0; i < pixels.length; i++) sum += pixels[i];
-    const threshold = sum / pixels.length;
-
-    // binary
-    const bits = pixels.map(p => p < threshold ? 1 : 0);
-
-    // หา runs (สลับ 0/1)
-    const runs = [];
-    let cur = bits[0], count = 1;
-    for (let i = 1; i < bits.length; i++) {
-      if (bits[i] === cur) { count++; }
-      else { runs.push({ v: cur, n: count }); cur = bits[i]; count = 1; }
-    }
-    runs.push({ v: cur, n: count });
-
-    // หา start code 128 pattern (11211412) normalize by unit
-    return tryCode128Decode(runs);
-  } catch(e) { return null; }
-}
-
-function tryCode128Decode(runs) {
-  // หาบล็อกที่เริ่มด้วย quiet zone + start pattern
-  // Code128 start: bars ratios 2-1-1-4-1-2 (หรือ B/C variant)
-  // ใช้ heuristic: หาลำดับ bar ที่ดูเหมือน barcode (สลับ dark/light หลายครั้ง)
-  const barRuns = runs.filter((r,i) => i > 0 && i < runs.length-1);
-  if (barRuns.length < 20) return null;
-
-  // หา unit width (bar แคบที่สุด)
-  const darkRuns = runs.filter(r => r.v === 1);
-  if (!darkRuns.length) return null;
-  darkRuns.sort((a,b) => a.n - b.n);
-  const unit = darkRuns[0].n;
-  if (unit < 1) return null;
-
-  // normalize
-  const norm = runs.map(r => Math.max(1, Math.round(r.n / unit)));
-
-  // ค้นหา Code128B start (11411211) ใน normalized runs
-  // Start B = 2 1 1 4 1 2 (dark light dark light dark light)
-  const startB = [2,1,1,4,1,2];
-  const startC = [2,1,1,4,1,2]; // same bits, diff meaning
-  const startA = [1,1,4,1,2,1,1]; 
-
-  for (let i = 0; i < norm.length - 30; i++) {
-    // ลองหา start pattern
-    let matchB = true;
-    for (let j = 0; j < startB.length; j++) {
-      if (norm[i+j] !== startB[j]) { matchB = false; break; }
-    }
-    if (!matchB) continue;
-
-    // เจอ start — decode characters
-    return decodeCode128Chars(norm, i + startB.length, unit, runs);
-  }
-  return null;
-}
-
-function decodeCode128Chars(norm, startIdx, unit, originalRuns) {
-  // Code128 B: each char = 3 bars + 3 spaces = 6 modules, total width 11 units
-  // values map — Code128B printable ASCII (space=0x20 ... ~=0x7E)
-  const CODE128B = [
-    ' ','!','"','#','$','%','&',"'",'(',')','*','+',',','-','.','/','0','1','2','3',
-    '4','5','6','7','8','9',':',';','<','=','>','?','@','A','B','C','D','E','F','G',
-    'H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','[',
-    '\\',']','^','_','`','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o',
-    'p','q','r','s','t','u','v','w','x','y','z','{','|','}','~'
-  ];
-  // All 103 Code128 symbol widths (6-bar patterns summing to 11)
-  const PATTERNS = [
-    [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],
-    [1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],
-    [2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],
-    [1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],
-    [2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],
-    [3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
-    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],
-    [1,3,1,3,2,1],[1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],
-    [2,3,1,1,1,3],[2,3,1,3,1,1],[1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],
-    [1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],[1,1,3,1,3,2],[1,3,1,3,1,2], // 50
-    [1,3,1,1,3,2],[1,3,3,1,1,2],[2,3,1,1,3,1],[1,3,3,3,1,1],[1,1,1,1,3,4],
-    [1,1,1,3,1,4],[1,3,1,1,1,4],[1,1,2,1,1,4],[1,1,4,1,1,2],[1,2,1,1,4,1],
-    [1,4,1,1,1,2],[1,1,1,4,2,1],[1,2,1,4,1,1],[1,4,2,1,1,1],[4,1,1,1,2,1], // 64
-    [1,1,1,2,4,1],[1,2,1,1,1,4],[1,4,1,2,1,1],[2,1,1,1,1,4],[2,1,1,4,1,1], // 69
-    [1,4,1,1,2,1],[1,1,2,4,1,1],[2,4,1,1,1,1],[1,4,2,1,1,1],[1,1,3,4,1,1], // 74
-    [4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,2,1,1,4],[1,4,2,2,1,1], // 79
-    [4,1,2,1,1,2],[1,1,1,1,4,2],[1,2,1,1,2,4],[1,2,1,4,2,1],[2,1,2,1,1,4], // 84
-    [2,1,4,1,1,2],[4,1,1,2,1,2],[1,3,1,2,2,1],[2,1,1,2,1,3],[3,3,1,1,1,2], // 89
-    [1,1,2,1,4,2],[1,2,4,1,2,1],[1,3,4,1,1,1],[1,4,1,3,1,1],[2,4,1,2,1,1], // 94
-    [4,1,1,1,1,3],[4,2,1,1,1,2],[1,2,3,1,1,2],[1,2,3,2,1,1],[1,2,1,3,3,1], // 99
-    [1,1,3,1,1,3],[2,1,3,2,1,1],[2,3,3,1,1,1],[2,1,1,1,3,2]  // 103
-  ];
-
-  let result = '';
-  let idx = startIdx;
-  let maxChars = 40;
-
-  while (idx + 6 <= norm.length && maxChars-- > 0) {
-    const seg = norm.slice(idx, idx+6);
-    let matched = -1;
-    for (let p = 0; p < PATTERNS.length; p++) {
-      if (PATTERNS[p].every((v,j) => v === seg[j])) { matched = p; break; }
-    }
-    if (matched === -1) break; // หยุดถ้า decode ไม่ได้
-    if (matched === 106) break; // stop character
-    if (matched < CODE128B.length) {
-      result += CODE128B[matched];
-    }
-    idx += 6;
-  }
-
-  // ต้องการอย่างน้อย 5 ตัวอักษร และ tracking pattern
-  if (result.length >= 5) return result.trim();
-  return null;
 }
 
 function stopScanning() {
@@ -653,14 +562,249 @@ function stopScanning() {
 
 function resetScanButtons() {
   const btn = document.getElementById('btn-start-scan');
-  btn.textContent = '📷 เปิดกล้องสแกน';
+  btn.textContent = state.usePhotoMode ? '📷 ถ่ายภาพบาร์โค้ด' : '📷 เปิดกล้องสแกน';
   btn.onclick = startScanning;
   document.getElementById('btn-manual-entry').classList.remove('hidden');
 }
 
+// ============================================================
+// MODE B: PHOTO CAPTURE (iOS LINE browser)
+// ถ่ายภาพ → BarcodeDetector หรือ canvas decode
+// ============================================================
+function startPhotoMode() {
+  const input = document.getElementById('photo-input');
+  input.value = '';
+  input.onchange = onPhotoSelected;
+  input.click();
+}
+
+async function onPhotoSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  showStatus('info', '⏳ กำลังวิเคราะห์บาร์โค้ด...');
+
+  // แสดง preview
+  const previewWrap = document.getElementById('photo-preview-wrap');
+  const previewImg  = document.getElementById('photo-preview-img');
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  document.getElementById('camera-placeholder').classList.add('hidden');
+  previewWrap.classList.remove('hidden');
+
+  try {
+    let result = null;
+
+    // วิธีที่ 1: BarcodeDetector กับ Image object
+    if (typeof BarcodeDetector !== 'undefined' && state.detector) {
+      try {
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        const codes = await state.detector.detect(img);
+        if (codes.length > 0) result = codes[0].rawValue;
+      } catch(e) {}
+    }
+
+    // วิธีที่ 2: canvas + code128 decode
+    if (!result) {
+      result = await decodeImageFile(file);
+    }
+
+    if (result) {
+      handleScanResult(result);
+      previewWrap.classList.add('hidden');
+      document.getElementById('camera-placeholder').classList.remove('hidden');
+    } else {
+      showStatus('warning', '⚠️ ไม่พบบาร์โค้ด — ลองถ่ายใหม่ให้บาร์โค้ดอยู่กลางภาพ ไม่มีแสงสะท้อน');
+      // ปุ่มลองใหม่
+      previewWrap.classList.add('hidden');
+      document.getElementById('camera-placeholder').classList.remove('hidden');
+    }
+  } catch(err) {
+    showStatus('error', '❌ ' + err.message);
+    previewWrap.classList.add('hidden');
+    document.getElementById('camera-placeholder').classList.remove('hidden');
+  }
+  URL.revokeObjectURL(url);
+}
+
+// decode จากไฟล์ภาพโดยตรง (canvas)
+async function decodeImageFile(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX = 1200;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+
+      // ลอง decode หลายแนว
+      let result = decodeFromCanvas(canvas, ctx);
+      if (!result) {
+        // หมุน 90 องศาแล้วลองใหม่
+        const c2 = document.createElement('canvas');
+        c2.width = h; c2.height = w;
+        const ctx2 = c2.getContext('2d', { willReadFrequently: true });
+        ctx2.translate(h/2, w/2);
+        ctx2.rotate(Math.PI/2);
+        ctx2.drawImage(canvas, -w/2, -h/2);
+        result = decodeFromCanvas(c2, ctx2);
+      }
+      resolve(result);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+// ============================================================
+// CANVAS BARCODE DECODE — Code128 A/B/C
+// ============================================================
+function decodeFromCanvas(canvas, ctx) {
+  const W = canvas.width, H = canvas.height;
+
+  // สแกนหลาย row ในโซนกลาง 50% ของภาพ
+  const rows = [];
+  for (let p = 20; p <= 80; p += 3) rows.push(Math.floor(H * p / 100));
+
+  for (const y of rows) {
+    const data = ctx.getImageData(0, y, W, 1).data;
+    const r = decodeRowCode128(data, W);
+    if (r) return r;
+  }
+  return null;
+}
+
+function decodeRowCode128(rowData, W) {
+  try {
+    // grayscale
+    const gray = new Uint8Array(W);
+    for (let x = 0; x < W; x++) {
+      const i = x * 4;
+      gray[x] = (rowData[i]*77 + rowData[i+1]*150 + rowData[i+2]*29) >> 8;
+    }
+
+    // local adaptive threshold (window 60px)
+    const bin = new Uint8Array(W);
+    const WIN = 60;
+    for (let x = 0; x < W; x++) {
+      let sum = 0, cnt = 0;
+      for (let k = Math.max(0,x-WIN); k <= Math.min(W-1,x+WIN); k++) { sum+=gray[k]; cnt++; }
+      bin[x] = gray[x] < (sum/cnt) - 8 ? 1 : 0;
+    }
+
+    // runs
+    const runs = [];
+    let cur = bin[0], n = 1;
+    for (let x = 1; x < W; x++) {
+      if (bin[x] === cur) n++;
+      else { runs.push([cur, n]); cur = bin[x]; n = 1; }
+    }
+    runs.push([cur, n]);
+    if (runs.length < 30) return null;
+
+    // unit = ค่า 15th percentile ของ dark runs
+    const darkW = runs.filter(r=>r[0]===1).map(r=>r[1]).sort((a,b)=>a-b);
+    if (darkW.length < 10) return null;
+    const unit = Math.max(1, darkW[Math.floor(darkW.length*0.15)]);
+
+    // normalize (tolerance ±45%)
+    const norm = runs.map(r => Math.max(1, Math.round(r[1]/unit)));
+
+    // หา start code128 pattern [2,1,1,4,1,2] หรือใกล้เคียง
+    for (let si = 0; si < norm.length-35; si++) {
+      if (runs[si][0] !== 1) continue;
+      if (!pMatch(norm,si,[2,1,1,4,1,2])) continue;
+
+      const r = tryDecode(norm, runs, si+6);
+      if (r && r.length >= 5) return r;
+    }
+    return null;
+  } catch(e) { return null; }
+}
+
+function pMatch(norm, i, pat) {
+  if (i + pat.length > norm.length) return false;
+  for (let j = 0; j < pat.length; j++) {
+    if (Math.abs(norm[i+j] - pat[j]) > Math.max(1, pat[j]*0.45)) return false;
+  }
+  return true;
+}
+
+// Code128 pattern table (103 symbols, index 0-102; 103=StartA, 104=StartB, 105=StartC, 106=Stop)
+const T = [
+  [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],
+  [1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],
+  [2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],
+  [1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],
+  [2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],
+  [3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+  [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],
+  [1,3,1,3,2,1],[1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],
+  [2,3,1,1,1,3],[2,3,1,3,1,1],[1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],
+  [1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],[1,1,3,1,3,2],[1,3,1,3,1,2],
+  [1,3,1,1,3,2],[1,3,3,1,1,2],[2,3,1,1,3,1],[1,3,3,3,1,1],[1,1,1,1,3,4],
+  [1,1,1,3,1,4],[1,3,1,1,1,4],[1,1,2,1,1,4],[1,1,4,1,1,2],[1,2,1,1,4,1],
+  [1,4,1,1,1,2],[1,1,1,4,2,1],[1,2,1,4,1,1],[1,4,2,1,1,1],[4,1,1,1,2,1],
+  [1,1,1,2,4,1],[1,2,1,1,1,4],[1,4,1,2,1,1],[2,1,1,1,1,4],[2,1,1,4,1,1],
+  [1,4,1,1,2,1],[1,1,2,4,1,1],[2,4,1,1,1,1],[1,4,2,1,1,1],[1,1,3,4,1,1],
+  [4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,2,1,1,4],[1,4,2,2,1,1],
+  [4,1,2,1,1,2],[1,1,1,1,4,2],[1,2,1,1,2,4],[1,2,1,4,2,1],[2,1,2,1,1,4],
+  [2,1,4,1,1,2],[4,1,1,2,1,2],[1,3,1,2,2,1],[2,1,1,2,1,3],[3,3,1,1,1,2],
+  [1,1,2,1,4,2],[1,2,4,1,2,1],[1,3,4,1,1,1],[1,4,1,3,1,1],[2,4,1,2,1,1],
+  [4,1,1,1,1,3],[4,2,1,1,1,2],[1,2,3,1,1,2],[1,2,3,2,1,1],[1,2,1,3,3,1],
+  [1,1,3,1,1,3],[2,1,3,2,1,1],[2,3,3,1,1,1],[2,1,1,1,3,2],
+];
+
+function tryDecode(norm, runs, si) {
+  let out = '', mode = 'B', idx = si;
+  for (let iter = 0; iter < 60; iter++) {
+    if (idx + 6 > norm.length) break;
+    // align ให้อยู่บน dark run
+    if (runs[idx] && runs[idx][0] !== 1) { idx++; continue; }
+
+    const seg = norm.slice(idx, idx+6);
+
+    // best match
+    let bestV = -1, bestE = 9999;
+    for (let v = 0; v < T.length; v++) {
+      let e = 0;
+      for (let k = 0; k < 6; k++) e += Math.abs(seg[k]-T[v][k]);
+      if (e < bestE) { bestE = e; bestV = v; }
+    }
+    if (bestE > 8) break;  // error ทุก module เฉลี่ย > 1.3 — หยุด
+    if (bestV === 106) break; // stop
+
+    // code switches
+    if (bestV === 99)  { mode = 'C'; idx+=6; continue; }
+    if (bestV === 100) { mode = 'B'; idx+=6; continue; }
+    if (bestV === 101) { mode = 'A'; idx+=6; continue; }
+    if (bestV >= 96)   { idx+=6; continue; } // FNC
+
+    if (mode === 'C') {
+      out += bestV.toString().padStart(2,'0');
+    } else if (mode === 'B') {
+      if (bestV <= 95) out += String.fromCharCode(bestV+32);
+    } else { // A
+      if (bestV < 64)      out += String.fromCharCode(bestV+32);
+      else if (bestV < 96) out += String.fromCharCode(bestV-64);
+    }
+    idx += 6;
+  }
+  return out.trim().length >= 5 ? out.trim() : null;
+}
+
+// ============================================================
+// HANDLE RESULT / MANUAL / NAV / FORM / SUBMIT
+// ============================================================
 function handleScanResult(code) {
   const clean = code.trim();
-  if (!clean || clean.length < 5) return;
+  if (!clean || clean.length < 5) { showStatus('warning','⚠️ บาร์โค้ดสั้นเกินไป'); return; }
   state.trackingNumber = clean;
   document.getElementById('scan-result-text').textContent      = clean;
   document.getElementById('form-tracking-preview').textContent = clean;
@@ -676,9 +820,6 @@ function clearScanResult() {
   clearStatus();
 }
 
-// ============================================================
-// MANUAL ENTRY
-// ============================================================
 function showManualEntry() {
   document.getElementById('manual-entry-box').classList.remove('hidden');
   document.getElementById('btn-manual-entry').classList.add('hidden');
@@ -696,15 +837,12 @@ function confirmManualEntry() {
   handleScanResult(val);
 }
 
-// ============================================================
-// FORM
-// ============================================================
 function checkFormFilled() {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
   const type  = document.getElementById('f-type').value;
-  const phoneOk = /^0[689]\d{8}$/.test(phone.replace(/\D/g,'')) || phone === 'ไม่มีเบอร์';
-  document.getElementById('btn-to-step3').disabled = !(name.length >= 2 && phoneOk && type !== '');
+  const ok    = name.length>=2 && (/^0[689]\d{8}$/.test(phone.replace(/\D/g,'')) || phone==='ไม่มีเบอร์') && type!=='';
+  document.getElementById('btn-to-step3').disabled = !ok;
   const hint = document.getElementById('phone-hint');
   if (phone && phone !== 'ไม่มีเบอร์') {
     const c = phone.replace(/\D/g,'');
@@ -715,14 +853,11 @@ function checkFormFilled() {
 }
 function setNoPhone() { document.getElementById('f-phone').value='ไม่มีเบอร์'; checkFormFilled(); }
 
-// ============================================================
-// NAVIGATION
-// ============================================================
 function setStep(n) {
   [1,2,3].forEach(i => {
     const el = document.getElementById('step'+i);
     el.classList.remove('active','done');
-    if (i < n) el.classList.add('done'); else if (i===n) el.classList.add('active');
+    if (i<n) el.classList.add('done'); else if(i===n) el.classList.add('active');
   });
 }
 function goToStep1() {
@@ -742,58 +877,48 @@ function goToStep3() {
   const name=document.getElementById('f-name').value.trim();
   const phone=document.getElementById('f-phone').value.trim();
   const type=document.getElementById('f-type').value;
-  if (!name||!phone||!type) { showStatus('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
-  document.getElementById('c-tracking').textContent = state.trackingNumber;
-  document.getElementById('c-name').textContent     = name;
-  document.getElementById('c-phone').textContent    = phone;
-  document.getElementById('c-type').textContent     = type;
+  if (!name||!phone||!type){ showStatus('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
+  document.getElementById('c-tracking').textContent=state.trackingNumber;
+  document.getElementById('c-name').textContent=name;
+  document.getElementById('c-phone').textContent=phone;
+  document.getElementById('c-type').textContent=type;
   document.getElementById('section-form').classList.add('hidden');
   document.getElementById('section-confirm').classList.remove('hidden');
   setStep(3); clearStatus();
 }
 
-// ============================================================
-// SUBMIT
-// ============================================================
 async function submitPackage() {
-  const btn = document.getElementById('btn-submit');
+  const btn=document.getElementById('btn-submit');
   btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...';
-  const tracking = state.trackingNumber;
-  const name     = document.getElementById('f-name').value.trim();
-  const phone    = document.getElementById('f-phone').value.trim();
-  const type     = document.getElementById('f-type').value;
-  const msg      = `${tracking}\n${name}\n${phone}\n${type}`;
+  const tracking=state.trackingNumber;
+  const name=document.getElementById('f-name').value.trim();
+  const phone=document.getElementById('f-phone').value.trim();
+  const type=document.getElementById('f-type').value;
   try {
-    await liff.sendMessages([{ type:'text', text:msg }]);
-    document.getElementById('success-tracking-display').textContent = tracking;
+    await liff.sendMessages([{type:'text',text:`${tracking}\n${name}\n${phone}\n${type}`}]);
+    document.getElementById('success-tracking-display').textContent=tracking;
     showScreen('success');
   } catch(e) {
     try {
-      const r = await fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'liff_submit', userId:state.adminUserId, tracking, name, phone, type }) });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      document.getElementById('success-tracking-display').textContent = tracking;
+      const r=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'liff_submit',userId:state.adminUserId,tracking,name,phone,type})});
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      document.getElementById('success-tracking-display').textContent=tracking;
       showScreen('success');
-    } catch(e2) {
-      showStatus('error','❌ บันทึกไม่สำเร็จ: '+e2.message);
-      btn.disabled=false; btn.textContent='📦 บันทึกพัสดุ';
-    }
+    } catch(e2){ showStatus('error','❌ บันทึกไม่สำเร็จ: '+e2.message); btn.disabled=false; btn.textContent='📦 บันทึกพัสดุ'; }
   }
 }
 
-// ============================================================
-// RESET & UTILS
-// ============================================================
 function resetAll() {
   state.trackingNumber='';
-  ['f-name','f-phone','manual-tracking'].forEach(id => document.getElementById(id).value='');
+  ['f-name','f-phone','manual-tracking'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-type').value='';
   document.getElementById('btn-to-step3').disabled=true;
   document.getElementById('phone-hint').textContent='';
   document.getElementById('manual-entry-box').classList.add('hidden');
   document.getElementById('btn-manual-entry').classList.remove('hidden');
+  document.getElementById('photo-preview-wrap').classList.add('hidden');
   clearScanResult();
-  showScreen('main');
-  goToStep1();
+  showScreen('main'); goToStep1();
 }
 function showStatus(type, text) {
   const bar=document.getElementById('status-bar');
@@ -803,7 +928,6 @@ function showStatus(type, text) {
 }
 function clearStatus() { document.getElementById('status-bar').classList.add('hidden'); }
 
-// START
 init();
 </script>
 </body>
