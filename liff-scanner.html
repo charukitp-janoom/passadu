@@ -411,8 +411,17 @@ function startScanning() {
     state.html5QrCode = new Html5Qrcode("reader");
   }
 
-  // ตั้งค่ากล้องและพื้นที่สแกน (แนวนอนสำหรับบาร์โค้ด)
-  const config = { fps: 10, qrbox: { width: 250, height: 100 } };
+  // ปรับปรุง Configuration: ขยายกล่องสแกนให้กว้างขึ้นสำหรับบาร์โค้ดพัสดุ
+  const config = { 
+    fps: 10, 
+    qrbox: (viewfinderWidth, viewfinderHeight) => {
+      // ให้กล่องกว้าง 90% ของความกว้างจอ แต่สูงแค่ 120px (เป็นสี่เหลี่ยมผืนผ้าแนวนอน)
+      return {
+        width: Math.floor(viewfinderWidth * 0.9), 
+        height: 120
+      };
+    }
+  };
   
   state.html5QrCode.start(
     { facingMode: "environment" }, 
