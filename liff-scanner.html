@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>บันทึกพัสดุ</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<!-- ZXing: ใช้ unpkg แทน cdnjs เพราะ namespace ถูกต้อง -->
-<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<!-- html5-qrcode: รองรับ iOS/Android LINE browser ได้ดีที่สุด -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
@@ -169,13 +169,23 @@
   }
   .camera-wrap {
     position: relative; background: #000;
-    aspect-ratio: 4/3; overflow: hidden;
+    width: 100%; overflow: hidden;
+    min-height: 240px;
   }
-  #camera-video { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .scan-overlay {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
+  /* Override html5-qrcode default styles */
+  #qr-reader {
+    border: none !important;
+    padding: 0 !important;
+    background: #000 !important;
+    width: 100% !important;
   }
+  #qr-reader video {
+    width: 100% !important;
+    object-fit: cover !important;
+  }
+  #qr-reader img { display: none !important; }
+  #qr-reader__dashboard { display: none !important; }
+  #qr-reader__status_span { display: none !important; }
   .scan-frame { width: 65%; aspect-ratio: 3/1; position: relative; }
   .scan-frame::before, .scan-frame::after,
   .scan-frame-inner::before, .scan-frame-inner::after {
@@ -391,16 +401,10 @@
     <div class="scanner-box">
       <div class="scanner-header">📷 สแกนบาร์โค้ดพัสดุ</div>
 
-      <!-- กล้องทำงาน -->
+      <!-- กล้องทำงาน (html5-qrcode render ใน div นี้เอง) -->
       <div id="camera-active" class="hidden">
         <div class="camera-wrap">
-          <video id="camera-video" autoplay muted playsinline></video>
-          <div class="scan-overlay">
-            <div class="scan-frame">
-              <div class="scan-frame-inner"></div>
-              <div class="scan-line"></div>
-            </div>
-          </div>
+          <div id="qr-reader" style="width:100%;height:100%;"></div>
         </div>
       </div>
 
@@ -558,8 +562,7 @@ const state = {
   adminUserId:    '',
   adminType:      '',
   isScanning:     false,
-  codeReader:     null,
-  currentStream:  null
+  html5QrCode:    null   // html5-qrcode instance
 };
 
 // ============================================================
@@ -650,37 +653,32 @@ async function startScanning() {
     btnScan.onclick = stopScanning;
     document.getElementById('btn-manual-entry').classList.add('hidden');
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    state.currentStream = stream;
-    const video = document.getElementById('camera-video');
-    video.srcObject = stream;
+    // html5-qrcode — ทำงานได้บน iOS/Android LINE browser
+    state.html5QrCode = new Html5Qrcode('qr-reader');
+    state.isScanning  = true;
 
-    // @zxing/library@0.21.3 — global namespace คือ ZXing
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.DATA_MATRIX,
-      ZXing.BarcodeFormat.ITF
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    state.codeReader = new ZXing.BrowserMultiFormatReader(hints);
-    state.isScanning = true;
-
-    // decodeFromStream รับ MediaStream โดยตรง — ใช้ได้กับ @zxing/library v0.21
-    state.codeReader.decodeFromStream(stream, video, (result, err) => {
-      if (result && state.isScanning) {
-        state.isScanning = false;
-        handleScanResult(result.getText());
-        stopScanning();
+    await state.html5QrCode.start(
+      { facingMode: 'environment' },
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 120 },
+        aspectRatio: 1.333,
+        supportedScanTypes: [
+          Html5QrcodeScanType.SCAN_TYPE_CAMERA
+        ]
+      },
+      (decodedText) => {
+        // สแกนสำเร็จ
+        if (state.isScanning) {
+          state.isScanning = false;
+          handleScanResult(decodedText);
+          stopScanning();
+        }
+      },
+      (errorMsg) => {
+        // scan error ระหว่างรอ — ไม่ต้อง handle
       }
-      // err = NotFoundException ระหว่างสแกนปกติ ไม่ต้อง handle
-    });
+    );
 
   } catch (err) {
     showStatus('error', '❌ ไม่สามารถเปิดกล้องได้: ' + err.message);
@@ -690,15 +688,16 @@ async function startScanning() {
   }
 }
 
-function stopScanning() {
+async function stopScanning() {
   state.isScanning = false;
-  if (state.codeReader) {
-    try { state.codeReader.reset(); } catch(e) {}
-    state.codeReader = null;
-  }
-  if (state.currentStream) {
-    state.currentStream.getTracks().forEach(t => t.stop());
-    state.currentStream = null;
+  if (state.html5QrCode) {
+    try {
+      if (state.html5QrCode.isScanning) {
+        await state.html5QrCode.stop();
+      }
+      state.html5QrCode.clear();
+    } catch(e) {}
+    state.html5QrCode = null;
   }
   document.getElementById('camera-active').classList.add('hidden');
   document.getElementById('camera-placeholder').classList.remove('hidden');
