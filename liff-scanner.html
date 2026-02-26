@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>บันทึกพัสดุ</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.19.1/zxing.min.js"></script>
+<!-- ZXing: ใช้ unpkg แทน cdnjs เพราะ namespace ถูกต้อง -->
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
@@ -656,6 +657,7 @@ async function startScanning() {
     const video = document.getElementById('camera-video');
     video.srcObject = stream;
 
+    // @zxing/library@0.21.3 — global namespace คือ ZXing
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       ZXing.BarcodeFormat.CODE_128,
@@ -666,15 +668,18 @@ async function startScanning() {
       ZXing.BarcodeFormat.DATA_MATRIX,
       ZXing.BarcodeFormat.ITF
     ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
     state.codeReader = new ZXing.BrowserMultiFormatReader(hints);
     state.isScanning = true;
 
-    state.codeReader.decodeFromVideoElement(video, (result, err) => {
+    // decodeFromStream รับ MediaStream โดยตรง — ใช้ได้กับ @zxing/library v0.21
+    state.codeReader.decodeFromStream(stream, video, (result, err) => {
       if (result && state.isScanning) {
         state.isScanning = false;
         handleScanResult(result.getText());
         stopScanning();
       }
+      // err = NotFoundException ระหว่างสแกนปกติ ไม่ต้อง handle
     });
 
   } catch (err) {
