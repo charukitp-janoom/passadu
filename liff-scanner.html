@@ -6,8 +6,6 @@
 <title>บันทึกพัสดุ</title>
 <!-- LIFF SDK เท่านั้น — ไม่มี barcode library ภายนอก -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<!-- เพิ่ม Library สำหรับอ่านบาร์โค้ดที่แม่นยำขึ้น -->
-<script src="https://unpkg.com/html5-qrcode"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
@@ -75,10 +73,19 @@
   .scanner-box { background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:16px; }
   .scanner-header { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; font-weight:600; font-size:14px; }
 
-  /* ปรับแต่งส่วนกล้องใหม่สำหรับ html5-qrcode */
-  #reader { width: 100%; min-height: 250px; background: #000; border-radius: 0 0 16px 16px; overflow: hidden; }
-  #reader video { object-fit: cover; }
-  
+  .camera-wrap { position:relative; background:#000; width:100%; aspect-ratio:4/3; overflow:hidden; }
+  #camera-video { width:100%; height:100%; object-fit:cover; display:block; }
+  /* scan frame overlay */
+  .scan-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .scan-frame { width:70%; aspect-ratio:3/1; position:relative; }
+  .scan-frame::before,.scan-frame::after,.scan-frame-inner::before,.scan-frame-inner::after { content:''; position:absolute; width:22px; height:22px; border-color:var(--green); border-style:solid; }
+  .scan-frame::before       { top:0;    left:0;  border-width:2px 0 0 2px; }
+  .scan-frame::after        { top:0;    right:0; border-width:2px 2px 0 0; }
+  .scan-frame-inner::before { bottom:0; left:0;  border-width:0 0 2px 2px; }
+  .scan-frame-inner::after  { bottom:0; right:0; border-width:0 2px 2px 0; }
+  .scan-line { position:absolute; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--green),transparent); animation:scanLine 2s ease-in-out infinite; box-shadow:0 0 8px var(--green); }
+  @keyframes scanLine { 0%,100%{top:5%} 50%{top:90%} }
+
   .camera-placeholder { aspect-ratio:4/3; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--text-muted); font-size:13px; padding:20px; text-align:center; }
   .camera-placeholder-icon { font-size:40px; }
 
@@ -180,7 +187,7 @@
   <div class="header-icon">📦</div>
   <div>
     <div class="header-title">บันทึกพัสดุเข้า</div>
-    <div class="header-sub">ระบบพัสดุ กองรักษาการ ป.5</div>
+    <div class="header-sub">ระบบพัสดุ กองรักษาการ ป.5 พัน.5</div>
   </div>
   <div class="admin-badge" id="admin-name-badge">...</div>
 </div>
@@ -203,9 +210,18 @@
     <div class="scanner-box">
       <div class="scanner-header">📷 สแกนบาร์โค้ดพัสดุ</div>
 
-      <!-- กล้อง live preview -->
+      <!-- กล้อง live preview (Android / BarcodeDetector) -->
       <div id="camera-active" class="hidden">
-        <div id="reader"></div>
+        <div class="camera-wrap">
+          <video id="camera-video" autoplay muted playsinline webkit-playsinline></video>
+          <canvas id="scan-canvas" style="display:none"></canvas>
+          <div class="scan-overlay">
+            <div class="scan-frame">
+              <div class="scan-frame-inner"></div>
+              <div class="scan-line"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- placeholder ก่อนเปิดกล้อง -->
@@ -324,19 +340,16 @@
 // ============================================================
 // ⚙️  CONFIG — แก้ 2 บรรทัดนี้เท่านั้น
 // ============================================================
-const LIFF_ID = '2009243376-Hd3IygRL';     // ⚠️ ใส่ LIFF ID
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec'; // ⚠️ ใส่ Web App URL
+const LIFF_ID = '2009243376-Hd3IygRL';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec';
 
 // ============================================================
 // STATE
 // ============================================================
-const state = {
-  trackingNumber: '',
-  adminName:      '',
-  adminUserId:    '',
-  adminType:      '',
-  html5QrCode:    null,
-  usePhotoMode:   false   // iOS: ถ่ายภาพแล้ว decode
+const S = {
+  tracking: '', adminName: '', adminUserId: '', adminType: '',
+  scanning: false, stream: null, rafId: null, detector: null,
+  iosMode: false   // true = ใช้ photo capture + GAS decode
 };
 
 // ============================================================
@@ -347,280 +360,415 @@ async function init() {
     await liff.init({ liffId: LIFF_ID });
     if (!liff.isLoggedIn()) { liff.login(); return; }
 
-    const profile = await liff.getProfile();
-    state.adminName   = profile.displayName;
-    state.adminUserId = profile.userId;
+    const p = await liff.getProfile();
+    S.adminName = p.displayName;
+    S.adminUserId = p.userId;
 
-    setLoadingText('กำลังตรวจสอบสิทธิ์...');
-    const auth = await checkAdminAuth(profile.userId);
-
+    setLoading('กำลังตรวจสอบสิทธิ์...');
+    const auth = await checkAuth(p.userId);
     if (!auth.isAdmin) {
-      document.getElementById('blocked-name').textContent   = profile.displayName;
-      document.getElementById('blocked-reason').textContent = auth.reason || 'คุณยังไม่ได้เข้าระบบเจ้าหน้าที่';
-      showScreen('blocked');
-      return;
+      $('blocked-name').textContent   = p.displayName;
+      $('blocked-reason').textContent = auth.reason || 'ยังไม่ได้เข้าระบบเจ้าหน้าที่';
+      showScreen('blocked'); return;
     }
 
-    state.adminType = auth.adminType || 'STAFF';
-    const adminLabel = state.adminType === 'MAIN_ADMIN' ? 'แอดมินหลัก' : 'เจ้าหน้าที่';
-    const badge = document.getElementById('admin-name-badge');
-    badge.textContent = profile.displayName;
-    if (state.adminType === 'MAIN_ADMIN') badge.classList.add('main');
-    document.getElementById('c-admin').textContent = `${profile.displayName} (${adminLabel})`;
+    S.adminType = auth.adminType || 'STAFF';
+    const badge = $('admin-name-badge');
+    badge.textContent = p.displayName;
+    if (S.adminType === 'MAIN_ADMIN') badge.classList.add('main');
+    $('c-admin').textContent = `${p.displayName} (${S.adminType === 'MAIN_ADMIN' ? 'แอดมินหลัก' : 'เจ้าหน้าที่'})`;
 
+    // ตรวจว่า browser รองรับอะไร
+    await setupScanMode();
     showScreen('main');
-  } catch (err) {
-    setLoadingText('❌ เชื่อมต่อระบบไม่ได้');
-    setTimeout(() => { showScreen('main'); showStatus('error', err.message); }, 1000);
-  }
-}
-
-async function checkAdminAuth(userId) {
-  try {
-    const resp = await fetch(`${GAS_URL}?action=check_admin&userId=${encodeURIComponent(userId)}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
   } catch(e) {
-    return { isAdmin: false, reason: `ตรวจสอบสิทธิ์ไม่ได้\n(${e.message})\nกรุณาลองใหม่` };
+    setLoading('❌ ' + e.message);
+    setTimeout(() => showScreen('main'), 1500);
   }
 }
 
-function showScreen(name) {
-  ['loading','blocked','success'].forEach(s => document.getElementById(`screen-${s}`).classList.add('hidden'));
-  if (name !== 'main') document.getElementById(`screen-${name}`).classList.remove('hidden');
+async function setupScanMode() {
+  // ลอง BarcodeDetector (Android Chrome / Samsung)
+  if (typeof BarcodeDetector !== 'undefined') {
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      if (fmts.includes('code_128') || fmts.length > 3) {
+        S.detector = new BarcodeDetector({
+          formats: ['code_128','code_39','ean_13','ean_8','qr_code','data_matrix','itf','pdf417','upc_a','upc_e']
+        });
+        setHint('');
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // ตรวจ getUserMedia
+  const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  if (!hasGUM) {
+    // iOS เก่า / LINE browser ที่บล็อก GUM
+    enableIOSPhotoMode();
+  }
+  // ถ้ามี GUM แต่ไม่มี BarcodeDetector → ลอง live แล้ว fallback อัตโนมัติ
 }
-function setLoadingText(t) { document.getElementById('loading-text').textContent = t; }
+
+function enableIOSPhotoMode() {
+  S.iosMode = true;
+  $('btn-start-scan').innerHTML = '📷 ถ่ายภาพบาร์โค้ด';
+  setHint('iOS mode: ถ่ายรูปบาร์โค้ดให้ชัด ระบบจะอ่านค่าให้อัตโนมัติ');
+}
+
+async function checkAuth(userId) {
+  try {
+    const r = await fetch(`${GAS_URL}?action=check_admin&userId=${encodeURIComponent(userId)}`);
+    return r.ok ? await r.json() : { isAdmin: false, reason: `HTTP ${r.status}` };
+  } catch(e) {
+    return { isAdmin: false, reason: e.message };
+  }
+}
+
+const $ = id => document.getElementById(id);
+function showScreen(n) {
+  ['loading','blocked','success'].forEach(s => $(`screen-${s}`).classList.add('hidden'));
+  if (n !== 'main') $(`screen-${n}`).classList.remove('hidden');
+}
+function setLoading(t) { $('loading-text').textContent = t; }
+function setHint(t)    { $('scan-hint-text').textContent = t; }
 
 // ============================================================
-// SCANNER — USING HTML5-QRCODE
+// SCAN ENTRY POINT
 // ============================================================
 function startScanning() {
-  if (state.usePhotoMode) {
-    startPhotoMode();
-    return;
-  }
-  
-  document.getElementById('camera-placeholder').classList.add('hidden');
-  document.getElementById('camera-active').classList.remove('hidden');
-  const btn = document.getElementById('btn-start-scan');
-  btn.textContent = '⏹ หยุดสแกน';
-  btn.onclick = stopScanning;
-  document.getElementById('btn-manual-entry').classList.add('hidden');
+  S.iosMode ? startPhotoCapture() : startLiveCamera();
+}
 
-  if (!state.html5QrCode) {
-    state.html5QrCode = new Html5Qrcode("reader");
-  }
+// ============================================================
+// MODE 1: LIVE CAMERA
+// ============================================================
+async function startLiveCamera() {
+  try {
+    $('camera-placeholder').classList.add('hidden');
+    $('camera-active').classList.remove('hidden');
+    $('btn-start-scan').innerHTML = '⏹ หยุดสแกน';
+    $('btn-start-scan').onclick = stopCamera;
+    $('btn-manual-entry').classList.add('hidden');
 
-  // ปรับปรุง Configuration: ขยายกล่องสแกนให้กว้างขึ้นสำหรับบาร์โค้ดพัสดุ
-  const config = { 
-    fps: 10, 
-    qrbox: (viewfinderWidth, viewfinderHeight) => {
-      // ให้กล่องกว้าง 90% ของความกว้างจอ แต่สูงแค่ 120px (เป็นสี่เหลี่ยมผืนผ้าแนวนอน)
-      return {
-        width: Math.floor(viewfinderWidth * 0.9), 
-        height: 120
-      };
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    const vid = $('camera-video');
+    vid.srcObject = S.stream;
+    await vid.play();
+    S.scanning = true;
+
+    if (S.detector) {
+      runNativeDetector(vid);
+    } else {
+      // ไม่มี BarcodeDetector → fallback ไป photo mode ทันที
+      stopCamera();
+      enableIOSPhotoMode();
+      showStatus('info', 'เปลี่ยนเป็นโหมดถ่ายภาพ (browser นี้ไม่รองรับ live scan)');
+      startPhotoCapture();
     }
-  };
-  
-  state.html5QrCode.start(
-    { facingMode: "environment" }, 
-    config,
-    (decodedText) => {
-      // เมื่อสแกนสำเร็จ
-      stopScanning();
-      handleScanResult(decodedText);
-    },
-    (errorMessage) => {
-      // กำลังพยายามสแกน (ทำงานตลอดเวลา ไม่ต้องแจ้งเตือน)
+  } catch(e) {
+    stopCamera();
+    if (e.name === 'NotAllowedError') {
+      showStatus('error', '❌ กรุณาอนุญาตกล้องในการตั้งค่า LINE');
+    } else {
+      // fallback photo mode
+      enableIOSPhotoMode();
+      showStatus('info', 'เปลี่ยนเป็นโหมดถ่ายภาพ');
+      startPhotoCapture();
     }
-  ).catch((err) => {
-    // ถ้าไม่ได้รับอนุญาตให้ใช้กล้อง หรือเปิดกล้องไม่ได้ (เช่น ใน iOS LINE บางเวอร์ชัน)
-    state.usePhotoMode = true;
-    stopScanning();
-    document.getElementById('scan-hint-text').textContent = 'เปลี่ยนเป็นโหมดอัปโหลดรูปภาพแทนเนื่องจากไม่สามารถเปิดกล้องได้';
-    startPhotoMode();
-  });
-}
-
-function stopScanning() {
-  if (state.html5QrCode && state.html5QrCode.isScanning) {
-    state.html5QrCode.stop().then(() => {
-      state.html5QrCode.clear();
-    }).catch(err => console.log(err));
   }
-  
-  const btn = document.getElementById('btn-start-scan');
-  btn.textContent = state.usePhotoMode ? '📷 ถ่าย/เลือกภาพบาร์โค้ด' : '📷 เปิดกล้องสแกน';
-  btn.onclick = startScanning;
-  document.getElementById('camera-active').classList.add('hidden');
-  document.getElementById('camera-placeholder').classList.remove('hidden');
-  document.getElementById('btn-manual-entry').classList.remove('hidden');
 }
 
-function startPhotoMode() {
-  const input = document.getElementById('photo-input');
-  input.value = '';
-  input.onchange = onPhotoSelected;
-  input.click();
+async function runNativeDetector(vid) {
+  while (S.scanning) {
+    try {
+      if (vid.readyState >= 2) {
+        const codes = await S.detector.detect(vid);
+        if (codes.length > 0) {
+          onResult(codes[0].rawValue);
+          return;
+        }
+      }
+    } catch(e) {}
+    await sleep(80);
+  }
 }
 
-async function onPhotoSelected(e) {
+function stopCamera() {
+  S.scanning = false;
+  if (S.rafId) { cancelAnimationFrame(S.rafId); S.rafId = null; }
+  if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+  const vid = $('camera-video');
+  vid.srcObject = null;
+  $('camera-active').classList.add('hidden');
+  $('camera-placeholder').classList.remove('hidden');
+  resetBtn();
+}
+
+// ============================================================
+// MODE 2: PHOTO CAPTURE → GAS DECODE (iOS / fallback)
+//
+// ส่งรูปไปให้ GAS decode โดยใช้ Google Apps Script
+// ซึ่งใช้ Java Barcode4J / ZXing ที่แม่น 100%
+// ============================================================
+function startPhotoCapture() {
+  const inp = $('photo-input');
+  inp.value = '';
+  inp.onchange = onPhoto;
+  inp.click();
+}
+
+async function onPhoto(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
 
-  showStatus('info', '⏳ กำลังวิเคราะห์บาร์โค้ดจากภาพ...');
-  if (!state.html5QrCode) state.html5QrCode = new Html5Qrcode("reader");
-
-  // แสดงภาพตัวอย่าง
-  const previewWrap = document.getElementById('photo-preview-wrap');
-  const previewImg  = document.getElementById('photo-preview-img');
+  // แสดง preview
   const url = URL.createObjectURL(file);
-  previewImg.src = url;
-  document.getElementById('camera-placeholder').classList.add('hidden');
-  previewWrap.classList.remove('hidden');
+  $('photo-preview-img').src = url;
+  $('camera-placeholder').classList.add('hidden');
+  $('photo-preview-wrap').classList.remove('hidden');
+  showStatus('info', '⏳ กำลังอ่านบาร์โค้ด...');
 
   try {
-    const result = await state.html5QrCode.scanFile(file, true);
-    handleScanResult(result);
-    clearStatus();
-    previewWrap.classList.add('hidden');
-    document.getElementById('camera-placeholder').classList.remove('hidden');
-  } catch (err) {
-    showStatus('warning', '⚠️ ไม่พบบาร์โค้ดในภาพ — ลองถ่ายให้ชัดเจน บาร์โค้ดอยู่ตรงกลาง ไม่มีแสงสะท้อน');
-    previewWrap.classList.add('hidden');
-    document.getElementById('camera-placeholder').classList.remove('hidden');
+    // ลอง BarcodeDetector กับ Image ก่อน (Android)
+    let result = null;
+    if (S.detector) {
+      result = await tryDetectFromFile(file, url);
+    }
+
+    // ถ้าไม่ได้ → ส่งไปให้ GAS decode
+    if (!result) {
+      result = await decodeViaGAS(file);
+    }
+
+    if (result) {
+      onResult(result);
+      $('photo-preview-wrap').classList.add('hidden');
+      $('camera-placeholder').classList.remove('hidden');
+    } else {
+      showStatus('warning', '⚠️ อ่านบาร์โค้ดไม่ได้ — ลองถ่ายใหม่ให้บาร์โค้ดอยู่กลางภาพ แสงสว่างเพียงพอ ไม่เอียง');
+      $('photo-preview-wrap').classList.add('hidden');
+      $('camera-placeholder').classList.remove('hidden');
+    }
+  } catch(err) {
+    showStatus('error', '❌ ' + err.message);
+    $('photo-preview-wrap').classList.add('hidden');
+    $('camera-placeholder').classList.remove('hidden');
+  }
+  URL.revokeObjectURL(url);
+}
+
+async function tryDetectFromFile(file, url) {
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const codes = await S.detector.detect(img);
+    return codes.length > 0 ? codes[0].rawValue : null;
+  } catch(e) { return null; }
+}
+
+// ส่งรูปไปให้ GAS decode ด้วย Google Apps Script
+// GAS จะรับ base64 แล้วใช้ UrlFetchApp / built-in decode
+async function decodeViaGAS(file) {
+  try {
+    // แปลงไฟล์เป็น base64 (resize ก่อนเพื่อลดขนาด)
+    const b64 = await fileToBase64Resized(file, 1200);
+    const resp = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'decode_barcode',
+        imageBase64: b64,
+        mimeType: 'image/jpeg'
+      })
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    return data.result || null;
+  } catch(e) {
+    console.warn('GAS decode failed:', e.message);
+    return null;
   }
 }
 
+async function fileToBase64Resized(file, maxW) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      // แปลงเป็น JPEG quality 90
+      const dataUrl = c.toDataURL('image/jpeg', 0.90);
+      resolve(dataUrl.split(',')[1]); // เอาแค่ base64
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load image failed')); };
+    img.src = url;
+  });
+}
+
 // ============================================================
-// HANDLE RESULT / MANUAL / NAV / FORM / SUBMIT
+// RESULT
 // ============================================================
-function handleScanResult(code) {
+function onResult(code) {
+  S.scanning = false;
   const clean = code.trim();
-  if (!clean || clean.length < 5) { showStatus('warning','⚠️ บาร์โค้ดสั้นเกินไป'); return; }
-  state.trackingNumber = clean;
-  document.getElementById('scan-result-text').textContent      = clean;
-  document.getElementById('form-tracking-preview').textContent = clean;
-  document.getElementById('scan-result-display').classList.remove('hidden');
-  document.getElementById('btn-to-step2').classList.remove('hidden');
+  if (!clean || clean.length < 4) { showStatus('warning','⚠️ บาร์โค้ดสั้นเกินไป'); return; }
+  S.tracking = clean;
+  $('scan-result-text').textContent      = clean;
+  $('form-tracking-preview').textContent = clean;
+  $('scan-result-display').classList.remove('hidden');
+  $('btn-to-step2').classList.remove('hidden');
   showStatus('success', '✅ สแกนสำเร็จ! กดถัดไปเพื่อกรอกข้อมูล');
 }
 
 function clearScanResult() {
-  state.trackingNumber = '';
-  document.getElementById('scan-result-display').classList.add('hidden');
-  document.getElementById('btn-to-step2').classList.add('hidden');
+  S.tracking = '';
+  $('scan-result-display').classList.add('hidden');
+  $('btn-to-step2').classList.add('hidden');
   clearStatus();
 }
 
+function resetBtn() {
+  $('btn-start-scan').innerHTML = S.iosMode ? '📷 ถ่ายภาพบาร์โค้ด' : '📷 เปิดกล้องสแกน';
+  $('btn-start-scan').onclick = startScanning;
+  $('btn-manual-entry').classList.remove('hidden');
+}
+
+// ============================================================
+// MANUAL
+// ============================================================
 function showManualEntry() {
-  document.getElementById('manual-entry-box').classList.remove('hidden');
-  document.getElementById('btn-manual-entry').classList.add('hidden');
-  setTimeout(() => document.getElementById('manual-tracking').focus(), 100);
+  $('manual-entry-box').classList.remove('hidden');
+  $('btn-manual-entry').classList.add('hidden');
+  setTimeout(() => $('manual-tracking').focus(), 100);
 }
 function hideManualEntry() {
-  document.getElementById('manual-entry-box').classList.add('hidden');
-  document.getElementById('btn-manual-entry').classList.remove('hidden');
-  document.getElementById('manual-tracking').value = '';
+  $('manual-entry-box').classList.add('hidden');
+  $('btn-manual-entry').classList.remove('hidden');
+  $('manual-tracking').value = '';
 }
 function confirmManualEntry() {
-  const val = document.getElementById('manual-tracking').value.trim().toUpperCase();
-  if (!val || val.length < 5) { showStatus('error','❌ กรุณาใส่เลขพัสดุอย่างน้อย 5 ตัวอักษร'); return; }
-  hideManualEntry();
-  handleScanResult(val);
+  const v = $('manual-tracking').value.trim().toUpperCase();
+  if (v.length < 4) { showStatus('error','❌ กรุณาใส่เลขพัสดุอย่างน้อย 4 ตัวอักษร'); return; }
+  hideManualEntry(); onResult(v);
 }
 
+// ============================================================
+// FORM
+// ============================================================
 function checkFormFilled() {
-  const name  = document.getElementById('f-name').value.trim();
-  const phone = document.getElementById('f-phone').value.trim();
-  const type  = document.getElementById('f-type').value;
-  const ok    = name.length>=2 && (/^0[689]\d{8}$/.test(phone.replace(/\D/g,'')) || phone==='ไม่มีเบอร์') && type!=='';
-  document.getElementById('btn-to-step3').disabled = !ok;
-  const hint = document.getElementById('phone-hint');
+  const name  = $('f-name').value.trim();
+  const phone = $('f-phone').value.trim();
+  const type  = $('f-type').value;
+  const ok    = name.length >= 2 && (/^0[689]\d{8}$/.test(phone.replace(/\D/g,'')) || phone === 'ไม่มีเบอร์') && type !== '';
+  $('btn-to-step3').disabled = !ok;
+  const hint = $('phone-hint');
   if (phone && phone !== 'ไม่มีเบอร์') {
     const c = phone.replace(/\D/g,'');
-    if (/^0[689]\d{8}$/.test(c))    { hint.style.color='var(--green)';  hint.textContent='✓ รูปแบบถูกต้อง'; }
-    else if (c.length >= 4)          { hint.style.color='var(--yellow)'; hint.textContent='⚠️ ควรขึ้นต้น 06/08/09 และ 10 หลัก'; }
-    else                              { hint.textContent=''; }
+    if (/^0[689]\d{8}$/.test(c))  { hint.style.color='var(--green)';  hint.textContent='✓ รูปแบบถูกต้อง'; }
+    else if (c.length >= 4)        { hint.style.color='var(--yellow)'; hint.textContent='⚠️ ควรขึ้นต้น 06/08/09 และ 10 หลัก'; }
+    else                            { hint.textContent=''; }
   } else { hint.textContent=''; }
 }
-function setNoPhone() { document.getElementById('f-phone').value='ไม่มีเบอร์'; checkFormFilled(); }
+function setNoPhone() { $('f-phone').value = 'ไม่มีเบอร์'; checkFormFilled(); }
 
+// ============================================================
+// NAVIGATION
+// ============================================================
 function setStep(n) {
   [1,2,3].forEach(i => {
-    const el = document.getElementById('step'+i);
+    const el = $('step'+i);
     el.classList.remove('active','done');
-    if (i<n) el.classList.add('done'); else if(i===n) el.classList.add('active');
+    if (i < n) el.classList.add('done'); else if (i === n) el.classList.add('active');
   });
 }
 function goToStep1() {
-  document.getElementById('section-form').classList.add('hidden');
-  document.getElementById('section-confirm').classList.add('hidden');
-  document.getElementById('section-scanner').classList.remove('hidden');
+  $('section-form').classList.add('hidden');
+  $('section-confirm').classList.add('hidden');
+  $('section-scanner').classList.remove('hidden');
   setStep(1); clearStatus();
 }
 function goToStep2() {
-  if (!state.trackingNumber) { showStatus('error','❌ กรุณาสแกนหรือพิมพ์เลขพัสดุก่อน'); return; }
-  document.getElementById('section-scanner').classList.add('hidden');
-  document.getElementById('section-confirm').classList.add('hidden');
-  document.getElementById('section-form').classList.remove('hidden');
+  if (!S.tracking) { showStatus('error','❌ กรุณาสแกนหรือพิมพ์เลขพัสดุก่อน'); return; }
+  $('section-scanner').classList.add('hidden');
+  $('section-confirm').classList.add('hidden');
+  $('section-form').classList.remove('hidden');
   setStep(2); clearStatus();
 }
 function goToStep3() {
-  const name=document.getElementById('f-name').value.trim();
-  const phone=document.getElementById('f-phone').value.trim();
-  const type=document.getElementById('f-type').value;
-  if (!name||!phone||!type){ showStatus('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
-  document.getElementById('c-tracking').textContent=state.trackingNumber;
-  document.getElementById('c-name').textContent=name;
-  document.getElementById('c-phone').textContent=phone;
-  document.getElementById('c-type').textContent=type;
-  document.getElementById('section-form').classList.add('hidden');
-  document.getElementById('section-confirm').classList.remove('hidden');
+  const name = $('f-name').value.trim(), phone = $('f-phone').value.trim(), type = $('f-type').value;
+  if (!name || !phone || !type) { showStatus('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
+  $('c-tracking').textContent = S.tracking;
+  $('c-name').textContent     = name;
+  $('c-phone').textContent    = phone;
+  $('c-type').textContent     = type;
+  $('section-form').classList.add('hidden');
+  $('section-confirm').classList.remove('hidden');
   setStep(3); clearStatus();
 }
 
+// ============================================================
+// SUBMIT
+// ============================================================
 async function submitPackage() {
-  const btn=document.getElementById('btn-submit');
-  btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...';
-  const tracking=state.trackingNumber;
-  const name=document.getElementById('f-name').value.trim();
-  const phone=document.getElementById('f-phone').value.trim();
-  const type=document.getElementById('f-type').value;
+  const btn = $('btn-submit');
+  btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+  const tracking = S.tracking;
+  const name  = $('f-name').value.trim();
+  const phone = $('f-phone').value.trim();
+  const type  = $('f-type').value;
   try {
-    await liff.sendMessages([{type:'text',text:`${tracking}\n${name}\n${phone}\n${type}`}]);
-    document.getElementById('success-tracking-display').textContent=tracking;
+    await liff.sendMessages([{ type: 'text', text: `${tracking}\n${name}\n${phone}\n${type}` }]);
+    $('success-tracking-display').textContent = tracking;
     showScreen('success');
   } catch(e) {
     try {
-      const r=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'liff_submit',userId:state.adminUserId,tracking,name,phone,type})});
-      if(!r.ok) throw new Error(`HTTP ${r.status}`);
-      document.getElementById('success-tracking-display').textContent=tracking;
+      const r = await fetch(GAS_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'liff_submit', userId: S.adminUserId, tracking, name, phone, type })
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      $('success-tracking-display').textContent = tracking;
       showScreen('success');
-    } catch(e2){ showStatus('error','❌ บันทึกไม่สำเร็จ: '+e2.message); btn.disabled=false; btn.textContent='📦 บันทึกพัสดุ'; }
+    } catch(e2) {
+      showStatus('error', '❌ บันทึกไม่สำเร็จ: ' + e2.message);
+      btn.disabled = false; btn.textContent = '📦 บันทึกพัสดุ';
+    }
   }
 }
 
+// ============================================================
+// UTILS
+// ============================================================
 function resetAll() {
-  state.trackingNumber='';
-  ['f-name','f-phone','manual-tracking'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f-type').value='';
-  document.getElementById('btn-to-step3').disabled=true;
-  document.getElementById('phone-hint').textContent='';
-  document.getElementById('manual-entry-box').classList.add('hidden');
-  document.getElementById('btn-manual-entry').classList.remove('hidden');
-  document.getElementById('photo-preview-wrap').classList.add('hidden');
+  S.tracking = '';
+  ['f-name','f-phone','manual-tracking'].forEach(id => $(id).value = '');
+  $('f-type').value = '';
+  $('btn-to-step3').disabled = true;
+  $('phone-hint').textContent = '';
+  $('manual-entry-box').classList.add('hidden');
+  $('btn-manual-entry').classList.remove('hidden');
+  $('photo-preview-wrap').classList.add('hidden');
   clearScanResult();
   showScreen('main'); goToStep1();
 }
 function showStatus(type, text) {
-  const bar=document.getElementById('status-bar');
-  bar.className=`status-bar ${type}`; bar.classList.remove('hidden');
-  document.getElementById('status-icon').textContent={error:'❌',success:'✅',info:'ℹ️',warning:'⚠️'}[type]||'ℹ️';
-  document.getElementById('status-text').textContent=text;
+  const b = $('status-bar');
+  b.className = `status-bar ${type}`; b.classList.remove('hidden');
+  $('status-icon').textContent = {error:'❌',success:'✅',info:'ℹ️',warning:'⚠️'}[type] || 'ℹ️';
+  $('status-text').textContent = text;
 }
-function clearStatus() { document.getElementById('status-bar').classList.add('hidden'); }
+function clearStatus() { $('status-bar').classList.add('hidden'); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 init();
 </script>
