@@ -137,6 +137,25 @@
   .hidden{display:none!important}
   .mt8{margin-top:8px}
   #photo-file{display:none}
+
+  /* QR / LIVE SCANNER */
+  .scan-tabs{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:3px;margin-bottom:14px}
+  .scan-tab{flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);border-radius:8px;cursor:pointer;transition:all .2s;border:none;background:none;font-family:'Sarabun',sans-serif}
+  .scan-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .qr-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden;display:none}
+  .qr-wrap.show{display:block}
+  #qr-video{width:100%;height:100%;object-fit:cover;display:block}
+  .qr-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .qr-frame{width:60%;aspect-ratio:1/1;position:relative}
+  .qr-frame::before,.qr-frame::after,.qr-fi::before,.qr-fi::after{content:'';position:absolute;width:24px;height:24px;border-color:var(--green);border-style:solid}
+  .qr-frame::before{top:0;left:0;border-width:3px 0 0 3px}
+  .qr-frame::after{top:0;right:0;border-width:3px 3px 0 0}
+  .qr-fi::before{bottom:0;left:0;border-width:0 0 3px 3px}
+  .qr-fi::after{bottom:0;right:0;border-width:0 3px 3px 0}
+  .qr-scan-line{position:absolute;left:5%;right:5%;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);animation:qrScan 2s ease-in-out infinite;box-shadow:0 0 8px var(--green)}
+  @keyframes qrScan{0%,100%{top:8%}50%{top:88%}}
+  .qr-status{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.5);padding:6px;backdrop-filter:blur(4px)}
+  .qr-stop-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;backdrop-filter:blur(4px);font-family:'Sarabun',sans-serif}
 </style>
 </head>
 <body>
@@ -197,32 +216,64 @@
       <div class="card-hdr">📸 ถ่ายรูปป้ายพัสดุ</div>
       <div class="card-body">
 
-        <!-- Preview รูป -->
-        <div class="preview-wrap" id="preview-wrap">
-          <img id="preview-img" src="" alt="">
-          <div class="preview-badge" id="preview-badge">รูปที่ถ่าย</div>
+        <!-- TABS: QR Live / ถ่ายรูป OCR -->
+        <div class="scan-tabs">
+          <button class="scan-tab active" id="tab-qr"  onclick="switchTab('qr')">📱 สแกน QR / บาร์โค้ด</button>
+          <button class="scan-tab"        id="tab-ocr" onclick="switchTab('ocr')">📸 ถ่ายรูป + AI อ่าน</button>
         </div>
 
-        <!-- Zone กดถ่ายรูป -->
-        <div class="ocr-zone" id="ocr-zone" onclick="triggerCamera()">
-          <div class="ocr-zone-icon">📷</div>
-          <div class="ocr-zone-title">กดถ่ายรูปพัสดุ</div>
-          <div class="ocr-zone-sub">ถ่ายให้เห็น<strong>บาร์โค้ด + ชื่อผู้รับ + เบอร์โทร</strong><br>ในรูปเดียว — AI จะอ่านให้อัตโนมัติ</div>
+        <!-- === TAB 1: QR LIVE === -->
+        <div id="panel-qr">
+          <!-- กล้อง live -->
+          <div class="qr-wrap" id="qr-wrap">
+            <video id="qr-video" autoplay muted playsinline webkit-playsinline></video>
+            <div class="qr-overlay">
+              <div class="qr-frame"><div class="qr-fi"></div><div class="qr-scan-line"></div></div>
+            </div>
+            <div class="qr-status" id="qr-status">กำลังค้นหา QR / บาร์โค้ด...</div>
+            <button class="qr-stop-btn" onclick="stopQR()">✕ หยุด</button>
+          </div>
+
+          <!-- ปุ่มเปิดกล้อง -->
+          <div class="ocr-zone" id="qr-start-zone" onclick="startQR()">
+            <div class="ocr-zone-icon">📱</div>
+            <div class="ocr-zone-title">กดสแกน QR Code / บาร์โค้ด</div>
+            <div class="ocr-zone-sub">ใช้กล้อง live สแกนได้ทันที<br>รองรับ QR, CODE128, EAN, Data Matrix</div>
+          </div>
+
+          <div class="spin-wrap" id="qr-spin">
+            <div class="spinner"></div>
+            <div class="spin-text" id="qr-spin-txt">กำลังเปิดกล้อง...</div>
+          </div>
         </div>
 
-        <!-- Spinner -->
-        <div class="spin-wrap" id="spin-wrap">
-          <div class="spinner"></div>
-          <div class="spin-text">AI กำลังอ่านข้อมูลจากรูป...</div>
+        <!-- === TAB 2: OCR ถ่ายรูป === -->
+        <div id="panel-ocr" class="hidden">
+          <!-- Preview รูป -->
+          <div class="preview-wrap" id="preview-wrap">
+            <img id="preview-img" src="" alt="">
+            <div class="preview-badge" id="preview-badge">รูปที่ถ่าย</div>
+          </div>
+
+          <div class="ocr-zone" id="ocr-zone" onclick="triggerCamera()">
+            <div class="ocr-zone-icon">📷</div>
+            <div class="ocr-zone-title">กดถ่ายรูปพัสดุ</div>
+            <div class="ocr-zone-sub">ถ่ายให้เห็น<strong>บาร์โค้ด + ชื่อผู้รับ + เบอร์โทร</strong><br>ในรูปเดียว — AI จะอ่านให้อัตโนมัติ</div>
+          </div>
+
+          <div class="spin-wrap" id="spin-wrap">
+            <div class="spinner"></div>
+            <div class="spin-text">AI กำลังอ่านข้อมูลจากรูป...</div>
+          </div>
         </div>
 
-        <!-- ผลลัพธ์ OCR -->
+        <!-- ผลลัพธ์ (แสดงทั้ง 2 tab) -->
         <div class="ocr-result" id="ocr-result">
           <div class="ocr-result-title">✅ อ่านได้แล้ว</div>
           <div class="ocr-row"><div class="ocr-row-lbl">เลขพัสดุ</div><div class="ocr-row-val" id="ocr-tracking">—</div></div>
           <div class="ocr-row"><div class="ocr-row-lbl">ชื่อผู้รับ</div><div class="ocr-row-val" id="ocr-name">—</div></div>
           <div class="ocr-row"><div class="ocr-row-lbl">เบอร์โทร</div><div class="ocr-row-val" id="ocr-phone">—</div></div>
-          <div class="ocr-retry" onclick="triggerCamera()">📷 ถ่ายใหม่</div>
+          <div class="ocr-retry" id="ocr-retry-btn">📷 ถ่ายใหม่ / สแกนใหม่</div>
         </div>
 
         <!-- input file ซ่อน -->
@@ -320,7 +371,7 @@
 
 <script>
 // ============================================================
-// CONFIG — แก้ 2 บรรทัดนี้
+// CONFIG
 // ============================================================
 const LIFF_ID = '2009243376-Hd3IygRL';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec';
@@ -330,7 +381,9 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAm
 // ============================================================
 const S = {
   tracking:'', name:'', phone:'', type:'',
-  adminName:'', adminUserId:'', adminType:''
+  adminName:'', adminUserId:'', adminType:'',
+  qrStream: null, qrRaf: null, qrDetector: null, qrRunning: false,
+  activeTab: 'qr'
 };
 const $ = id => document.getElementById(id);
 
@@ -356,9 +409,29 @@ async function init() {
     if (S.adminType === 'MAIN_ADMIN') $('badge-name').classList.add('main');
     $('c-admin').textContent = p.displayName + (S.adminType === 'MAIN_ADMIN' ? ' (แอดมินหลัก)' : ' (เจ้าหน้าที่)');
     show('main');
-
-    // ผูก input file
     $('photo-file').addEventListener('change', onPhotoSelected);
+    $('ocr-retry-btn').addEventListener('click', onRetry);
+
+    // ตรวจสอบ BarcodeDetector
+    if (typeof BarcodeDetector !== 'undefined') {
+      try {
+        const fmts = await BarcodeDetector.getSupportedFormats();
+        if (fmts.length > 0) {
+          S.qrDetector = new BarcodeDetector({
+            formats: ['qr_code','code_128','code_39','ean_13','ean_8',
+                      'data_matrix','itf','pdf417','upc_a','upc_e','aztec']
+          });
+        }
+      } catch(e) {}
+    }
+
+    // ถ้าไม่มี BarcodeDetector → ซ่อน tab QR แล้ว switch ไป OCR
+    if (!S.qrDetector) {
+      $('tab-qr').style.opacity = '0.4';
+      $('tab-qr').title = 'browser ไม่รองรับ live scan';
+      switchTab('ocr');
+    }
+
   } catch(e) {
     setLoad('❌ ' + e.message);
     setTimeout(() => show('main'), 1500);
@@ -379,7 +452,126 @@ function show(s) {
 function setLoad(t) { $('load-txt').textContent = t; }
 
 // ============================================================
-// STEP 1 — ถ่ายรูป + OCR
+// TABS
+// ============================================================
+function switchTab(tab) {
+  S.activeTab = tab;
+  stopQR(); // หยุดกล้องถ้ากำลังเปิด
+  $('tab-qr').classList.toggle('active', tab === 'qr');
+  $('tab-ocr').classList.toggle('active', tab === 'ocr');
+  $('panel-qr').classList.toggle('hidden', tab !== 'qr');
+  $('panel-ocr').classList.toggle('hidden', tab !== 'ocr');
+}
+
+function onRetry() {
+  $('ocr-result').classList.remove('show');
+  $('btn-next1').classList.add('hidden');
+  clearSbar();
+  if (S.activeTab === 'qr') {
+    $('qr-start-zone').style.display = '';
+    startQR();
+  } else {
+    triggerCamera();
+  }
+}
+
+// ============================================================
+// TAB 1: QR / BARCODE LIVE SCAN (BarcodeDetector)
+// ============================================================
+async function startQR() {
+  if (!S.qrDetector) {
+    setSbar('warning', '⚠️ Browser ไม่รองรับ Live Scan — กรุณาใช้แท็บ "ถ่ายรูป + AI อ่าน"');
+    switchTab('ocr'); return;
+  }
+  $('qr-start-zone').style.display = 'none';
+  $('qr-spin').classList.add('show');
+  $('qr-spin-txt').textContent = 'กำลังเปิดกล้อง...';
+
+  try {
+    S.qrStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    const vid = $('qr-video');
+    vid.srcObject = S.qrStream;
+    await vid.play();
+    $('qr-wrap').classList.add('show');
+    $('qr-spin').classList.remove('show');
+    $('qr-status').textContent = 'กำลังค้นหา QR / บาร์โค้ด...';
+    S.qrRunning = true;
+    runQRDetect(vid);
+  } catch(err) {
+    $('qr-spin').classList.remove('show');
+    $('qr-start-zone').style.display = '';
+    if (err.name === 'NotAllowedError') {
+      setSbar('error', '❌ กรุณาอนุญาตกล้องในการตั้งค่า LINE แล้วลองใหม่');
+    } else {
+      setSbar('warning', '⚠️ เปิดกล้องไม่ได้ — ลองใช้แท็บ "ถ่ายรูป + AI อ่าน" แทน');
+      switchTab('ocr');
+    }
+  }
+}
+
+async function runQRDetect(vid) {
+  while (S.qrRunning) {
+    try {
+      if (vid.readyState >= 2) {
+        const codes = await S.qrDetector.detect(vid);
+        if (codes.length > 0) {
+          const raw = codes[0].rawValue;
+          S.qrRunning = false;
+          stopQR();
+          onQRFound(raw);
+          return;
+        }
+      }
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 100));
+  }
+}
+
+function stopQR() {
+  S.qrRunning = false;
+  if (S.qrStream) {
+    S.qrStream.getTracks().forEach(t => t.stop());
+    S.qrStream = null;
+  }
+  $('qr-video').srcObject = null;
+  $('qr-wrap').classList.remove('show');
+  $('qr-spin').classList.remove('show');
+}
+
+function onQRFound(raw) {
+  // QR อาจมี URL หรือ JSON ที่มีข้อมูลพัสดุ — พยายามดึง tracking
+  let tracking = raw.trim();
+
+  // ถ้าเป็น URL → ดึง path สุดท้าย
+  if (tracking.startsWith('http')) {
+    try { tracking = new URL(tracking).pathname.split('/').filter(Boolean).pop() || tracking; } catch(e) {}
+  }
+  // ถ้าเป็น JSON → ดึง tracking field
+  if (tracking.startsWith('{')) {
+    try {
+      const obj = JSON.parse(tracking);
+      tracking = obj.tracking || obj.trackingNumber || obj.id || tracking;
+    } catch(e) {}
+  }
+
+  S.tracking = tracking;
+  // QR อาจไม่มีชื่อ/เบอร์ — ให้กรอกใน step 2
+  S.name = ''; S.phone = ''; S.type = '';
+
+  $('ocr-tracking').textContent = tracking;
+  $('ocr-name').textContent     = '(กรอกในขั้นตอนถัดไป)';
+  $('ocr-phone').textContent    = '(กรอกในขั้นตอนถัดไป)';
+  $('ocr-result').classList.add('show');
+  $('qr-start-zone').style.display = '';
+  $('btn-next1').classList.remove('hidden');
+  setSbar('success', '✅ สแกนได้: ' + tracking);
+}
+
+// ============================================================
+// TAB 2: OCR ถ่ายรูป
 // ============================================================
 function triggerCamera() {
   $('photo-file').value = '';
@@ -390,49 +582,65 @@ async function onPhotoSelected(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
 
-  // แสดง preview
+  // switch ไป OCR tab ถ้ายังไม่ได้อยู่
+  if (S.activeTab !== 'ocr') switchTab('ocr');
+
   const url = URL.createObjectURL(file);
   $('preview-img').src = url;
   $('preview-wrap').classList.add('show');
   $('preview-badge').textContent = '📸 กำลังประมวลผล...';
-
-  // ซ่อน zone / result เก่า แสดง spinner
   $('ocr-zone').classList.add('scanning');
   $('ocr-result').classList.remove('show');
   $('spin-wrap').classList.add('show');
   $('btn-next1').classList.add('hidden');
-  setSbar('');
+  clearSbar();
 
   try {
     const b64 = await resizeToBase64(file, 1200);
-    const result = await callOCR(b64);
 
-    // แสดงผล
+    // ลอง BarcodeDetector กับรูปก่อน (ถ้ามี)
+    let qrResult = null;
+    if (S.qrDetector) {
+      try {
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        const codes = await S.qrDetector.detect(img);
+        if (codes.length > 0) qrResult = codes[0].rawValue;
+      } catch(e) {}
+    }
+
+    let result;
+    if (qrResult) {
+      // ได้จาก BarcodeDetector → ส่ง OCR ต่อเพื่อดึงชื่อ/เบอร์ด้วย
+      const ocrData = await callOCR(b64);
+      result = { ...ocrData, tracking: qrResult }; // override tracking ด้วยค่าจาก BarcodeDetector
+    } else {
+      result = await callOCR(b64);
+    }
+
     $('ocr-tracking').textContent = result.tracking || '—';
     $('ocr-name').textContent     = result.name     || '—';
     $('ocr-phone').textContent    = result.phone    || '—';
     $('ocr-result').classList.add('show');
     $('ocr-zone').className = 'ocr-zone done';
-    $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">✅</div><div class="ocr-zone-title" style="color:var(--green)">อ่านสำเร็จ!</div><div class="ocr-zone-sub">กดถัดไปเพื่อตรวจสอบข้อมูล<br>หรือ <u onclick="triggerCamera()" style="color:var(--blue);cursor:pointer">ถ่ายใหม่</u></div>';
+    $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">✅</div><div class="ocr-zone-title" style="color:var(--green)">อ่านสำเร็จ!</div><div class="ocr-zone-sub">กดถัดไปเพื่อตรวจสอบ<br>หรือ <u onclick="triggerCamera()" style="color:var(--blue);cursor:pointer">ถ่ายใหม่</u></div>';
     $('preview-badge').textContent = '✅ อ่านสำเร็จ';
 
-    // เซฟลง state
     S.tracking = (result.tracking || '').trim();
     S.name     = (result.name     || '').trim();
     S.phone    = (result.phone    || '').replace(/\D/g,'').slice(0,10);
     S.type     = result.type || '';
 
-    // ถ้าได้ tracking แสดงปุ่มถัดไป
     if (S.tracking && S.tracking !== 'ไม่พบ') {
       $('btn-next1').classList.remove('hidden');
       setSbar('success', '✅ อ่านเลขพัสดุ: ' + S.tracking);
     } else {
-      setSbar('warning', '⚠️ อ่านเลขพัสดุไม่ได้ — กรุณาถ่ายใหม่ให้เห็นบาร์โค้ดชัดขึ้น หรือพิมพ์เองด้านล่าง');
+      setSbar('warning', '⚠️ อ่านเลขพัสดุไม่ได้ — ถ่ายใหม่ให้เห็นบาร์โค้ด/QR ชัดขึ้น หรือพิมพ์เองด้านล่าง');
     }
 
   } catch(err) {
     $('ocr-zone').className = 'ocr-zone';
-    $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">📷</div><div class="ocr-zone-title">กดถ่ายรูปอีกครั้ง</div><div class="ocr-zone-sub">เกิดข้อผิดพลาด — ลองใหม่อีกครั้ง</div>';
+    $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">📷</div><div class="ocr-zone-title">กดถ่ายรูปอีกครั้ง</div><div class="ocr-zone-sub">เกิดข้อผิดพลาด — ลองใหม่</div>';
     setSbar('error', '❌ ' + err.message);
     $('preview-badge').textContent = '❌ ผิดพลาด';
   } finally {
@@ -443,11 +651,7 @@ async function onPhotoSelected(e) {
 
 async function callOCR(b64) {
   const form = new FormData();
-  form.append('payload', JSON.stringify({
-    action: 'ocr_label',
-    imageBase64: b64,
-    mimeType: 'image/jpeg'
-  }));
+  form.append('payload', JSON.stringify({ action:'ocr_label', imageBase64:b64, mimeType:'image/jpeg' }));
   const resp = await fetch(GAS_URL, { method:'POST', body:form });
   if (!resp.ok) throw new Error('GAS HTTP ' + resp.status);
   const data = await resp.json();
@@ -456,7 +660,7 @@ async function callOCR(b64) {
 }
 
 async function resizeToBase64(file, maxW) {
-  return new Promise((resolve, reject) => {
+  return new Promise((res, rej) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -466,15 +670,15 @@ async function resizeToBase64(file, maxW) {
       c.width = w; c.height = h;
       c.getContext('2d').drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.88).split(',')[1]);
+      res(c.toDataURL('image/jpeg', 0.88).split(',')[1]);
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('โหลดรูปไม่ได้')); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('โหลดรูปไม่ได้')); };
     img.src = url;
   });
 }
 
 // ============================================================
-// MANUAL ENTRY (สำรอง)
+// MANUAL ENTRY
 // ============================================================
 function showManual() {
   $('manual-box').classList.remove('hidden');
@@ -493,14 +697,12 @@ function onManualInput() {
 }
 function confirmManual() {
   const v = $('manual-val').value.trim().toUpperCase();
-  if (v.length < 4) { setSbar('error','❌ กรุณาใส่เลขพัสดุอย่างน้อย 4 ตัว'); return; }
-  S.tracking = v;
-  $('manual-val').value = v;
-  hideManual();
+  if (v.length < 4) { setSbar('error','❌ กรุณาใส่อย่างน้อย 4 ตัว'); return; }
+  S.tracking = v; hideManual();
   $('btn-next1').classList.remove('hidden');
   setSbar('success', '✅ เลขพัสดุ: ' + v);
 }
-function retakePhoto() { goStep1(); setTimeout(triggerCamera, 200); }
+function retakePhoto() { goStep1(); setTimeout(() => { if (S.activeTab === 'qr') startQR(); else triggerCamera(); }, 200); }
 
 // ============================================================
 // NAVIGATION
@@ -513,48 +715,35 @@ function setStep(n) {
     else if (i === n) el.classList.add('active');
   });
 }
-
 function goStep1() {
+  stopQR();
   $('sec-form').classList.add('hidden');
   $('sec-confirm').classList.add('hidden');
   $('sec-scan').classList.remove('hidden');
   setStep(1); clearSbar();
 }
-
 function goStep2() {
   if (!S.tracking || S.tracking === 'ไม่พบ') {
-    setSbar('error','❌ ยังไม่มีเลขพัสดุ — ถ่ายรูปหรือพิมพ์เองก่อน'); return;
+    setSbar('error','❌ ยังไม่มีเลขพัสดุ'); return;
   }
-  // กรอกฟอร์มด้วยข้อมูล OCR
+  stopQR();
   $('form-tracking-preview').textContent = S.tracking;
-  if (S.name && S.name !== 'ไม่พบ') {
-    $('f-name').value = S.name;
-    $('f-name').classList.add('ai-filled');
-  } else {
-    $('f-name').value = '';
-    $('f-name').classList.remove('ai-filled');
-  }
+  if (S.name && S.name !== 'ไม่พบ' && S.name !== '(กรอกในขั้นตอนถัดไป)') {
+    $('f-name').value = S.name; $('f-name').classList.add('ai-filled');
+  } else { $('f-name').value = ''; $('f-name').classList.remove('ai-filled'); }
   if (S.phone && S.phone.length >= 9) {
-    $('f-phone').value = S.phone;
-    $('f-phone').classList.add('ai-filled');
-  } else {
-    $('f-phone').value = '';
-    $('f-phone').classList.remove('ai-filled');
-  }
-  const typeMap = {'กล่อง':'กล่อง','ซอง':'ซอง','ถุง':'ถุง','ม้วน':'ม้วน'};
-  $('f-type').value = typeMap[S.type] || '';
-
+    $('f-phone').value = S.phone; $('f-phone').classList.add('ai-filled');
+  } else { $('f-phone').value = ''; $('f-phone').classList.remove('ai-filled'); }
+  const tm = {'กล่อง':'กล่อง','ซอง':'ซอง','ถุง':'ถุง','ม้วน':'ม้วน'};
+  $('f-type').value = tm[S.type] || '';
   $('sec-scan').classList.add('hidden');
   $('sec-confirm').classList.add('hidden');
   $('sec-form').classList.remove('hidden');
   setStep(2); clearSbar(); checkForm();
 }
-
 function goStep3() {
-  const name  = $('f-name').value.trim();
-  const phone = $('f-phone').value.trim();
-  const type  = $('f-type').value;
-  if (!name || !phone || !type) { setSbar('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
+  const name = $('f-name').value.trim(), phone = $('f-phone').value.trim(), type = $('f-type').value;
+  if (!name||!phone||!type) { setSbar('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
   $('c-tracking').textContent = S.tracking;
   $('c-name').textContent = name;
   $('c-phone').textContent = phone;
@@ -565,20 +754,16 @@ function goStep3() {
 }
 
 // ============================================================
-// FORM VALIDATION
+// FORM
 // ============================================================
 function checkForm() {
-  const name  = $('f-name').value.trim();
-  const phone = $('f-phone').value.trim();
-  const type  = $('f-type').value;
-  const ok = name.length >= 2 &&
-    (/^0[689]\d{8}$/.test(phone.replace(/\D/g,'')) || phone === 'ไม่มีเบอร์') &&
-    type !== '';
+  const name = $('f-name').value.trim(), phone = $('f-phone').value.trim(), type = $('f-type').value;
+  const ok = name.length>=2 && (/^0[689]\d{8}$/.test(phone.replace(/\D/g,''))||phone==='ไม่มีเบอร์') && type!=='';
   $('btn-next2').disabled = !ok;
   const hint = $('phone-hint');
   if (phone && phone !== 'ไม่มีเบอร์') {
     const c = phone.replace(/\D/g,'');
-    if (/^0[689]\d{8}$/.test(c))  { hint.style.color='var(--green)'; hint.textContent='✓ รูปแบบถูกต้อง'; }
+    if (/^0[689]\d{8}$/.test(c))  { hint.style.color='var(--green)';  hint.textContent='✓ รูปแบบถูกต้อง'; }
     else if (c.length >= 4)        { hint.style.color='var(--yellow)'; hint.textContent='⚠️ ควรขึ้นต้น 06/08/09 และ 10 หลัก'; }
     else                            { hint.textContent=''; }
   } else { hint.textContent=''; }
@@ -592,23 +777,17 @@ async function submitPackage() {
   const btn = $('btn-submit');
   btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
   const tracking = S.tracking;
-  const name  = $('f-name').value.trim();
-  const phone = $('f-phone').value.trim();
-  const type  = $('f-type').value;
+  const name = $('f-name').value.trim(), phone = $('f-phone').value.trim(), type = $('f-type').value;
   try {
     await liff.sendMessages([{ type:'text', text:`${tracking}\n${name}\n${phone}\n${type}` }]);
-    $('ok-tracking').textContent = tracking;
-    show('ov-ok');
+    $('ok-tracking').textContent = tracking; show('ov-ok');
   } catch(e) {
     try {
       const form = new FormData();
-      form.append('payload', JSON.stringify({
-        action:'liff_submit', userId:S.adminUserId, tracking, name, phone, type
-      }));
+      form.append('payload', JSON.stringify({ action:'liff_submit', userId:S.adminUserId, tracking, name, phone, type }));
       const r = await fetch(GAS_URL, { method:'POST', body:form });
       if (!r.ok) throw new Error('HTTP '+r.status);
-      $('ok-tracking').textContent = tracking;
-      show('ov-ok');
+      $('ok-tracking').textContent = tracking; show('ov-ok');
     } catch(e2) {
       setSbar('error','❌ บันทึกไม่สำเร็จ: '+e2.message);
       btn.disabled = false; btn.textContent = '📦 บันทึกพัสดุ';
@@ -620,28 +799,29 @@ async function submitPackage() {
 // RESET
 // ============================================================
 function resetAll() {
-  S.tracking = ''; S.name = ''; S.phone = ''; S.type = '';
-  $('f-name').value = ''; $('f-phone').value = ''; $('f-type').value = '';
-  $('f-name').classList.remove('ai-filled');
-  $('f-phone').classList.remove('ai-filled');
+  S.tracking=''; S.name=''; S.phone=''; S.type='';
+  stopQR();
+  $('f-name').value=''; $('f-phone').value=''; $('f-type').value='';
+  $('f-name').classList.remove('ai-filled'); $('f-phone').classList.remove('ai-filled');
   $('preview-wrap').classList.remove('show');
   $('ocr-result').classList.remove('show');
   $('spin-wrap').classList.remove('show');
+  $('qr-spin').classList.remove('show');
   $('btn-next1').classList.add('hidden');
   $('manual-box').classList.add('hidden');
   $('btn-manual').classList.remove('hidden');
+  $('qr-start-zone').style.display = '';
   $('ocr-zone').className = 'ocr-zone';
   $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">📷</div><div class="ocr-zone-title">กดถ่ายรูปพัสดุ</div><div class="ocr-zone-sub">ถ่ายให้เห็น<strong>บาร์โค้ด + ชื่อผู้รับ + เบอร์โทร</strong><br>ในรูปเดียว — AI จะอ่านให้อัตโนมัติ</div>';
   show('main'); goStep1();
 }
 
 // ============================================================
-// STATUS BAR
+// STATUS
 // ============================================================
 function setSbar(type, text) {
   if (!type) { clearSbar(); return; }
-  const b = $('sbar');
-  b.className = 'sbar ' + type; b.classList.remove('hidden');
+  const b = $('sbar'); b.className = 'sbar '+type; b.classList.remove('hidden');
   $('sbar-icon').textContent = {error:'❌',success:'✅',info:'ℹ️',warning:'⚠️'}[type]||'ℹ️';
   $('sbar-txt').textContent = text;
 }
