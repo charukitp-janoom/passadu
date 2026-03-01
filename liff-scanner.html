@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>บันทึกพัสดุ</title>
+<!-- เพิ่ม Library html5-qrcode สำหรับสแกนบาร์โค้ด/QR โค้ดที่รวดเร็วและรองรับทุกอุปกรณ์ -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
@@ -136,16 +138,19 @@
   @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.7}}
   .hidden{display:none!important}
   .mt8{margin-top:8px}
-  #photo-file{display:none}
 
-  /* QR / LIVE SCANNER */
+  /* QR / LIVE SCANNER OVERRIDE FOR HTML5-QRCODE */
   .scan-tabs{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:3px;margin-bottom:14px}
   .scan-tab{flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);border-radius:8px;cursor:pointer;transition:all .2s;border:none;background:none;font-family:'Sarabun',sans-serif}
   .scan-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
   .qr-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden;display:none}
   .qr-wrap.show{display:block}
-  #qr-video{width:100%;height:100%;object-fit:cover;display:block}
-  .qr-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  #qr-reader{width:100%;height:100%;object-fit:cover;display:block}
+  #qr-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
+  /* ซ่อนปุ่ม default ของไลบรารีบางตัว */
+  #qr-reader__dashboard_section_csr { display: none !important; }
+
+  .qr-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10}
   .qr-frame{width:60%;aspect-ratio:1/1;position:relative}
   .qr-frame::before,.qr-frame::after,.qr-fi::before,.qr-fi::after{content:'';position:absolute;width:24px;height:24px;border-color:var(--green);border-style:solid}
   .qr-frame::before{top:0;left:0;border-width:3px 0 0 3px}
@@ -154,8 +159,8 @@
   .qr-fi::after{bottom:0;right:0;border-width:0 3px 3px 0}
   .qr-scan-line{position:absolute;left:5%;right:5%;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);animation:qrScan 2s ease-in-out infinite;box-shadow:0 0 8px var(--green)}
   @keyframes qrScan{0%,100%{top:8%}50%{top:88%}}
-  .qr-status{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.5);padding:6px;backdrop-filter:blur(4px)}
-  .qr-stop-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;backdrop-filter:blur(4px);font-family:'Sarabun',sans-serif}
+  .qr-status{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.5);padding:6px;backdrop-filter:blur(4px);z-index:10}
+  .qr-stop-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;backdrop-filter:blur(4px);font-family:'Sarabun',sans-serif;z-index:20}
 </style>
 </head>
 <body>
@@ -224,18 +229,18 @@
 
         <!-- === TAB 1: QR LIVE === -->
         <div id="panel-qr">
-          <!-- กล้อง live -->
+          <!-- กล้อง live ด้วย Html5Qrcode -->
           <div class="qr-wrap" id="qr-wrap">
-            <video id="qr-video" autoplay muted playsinline webkit-playsinline></video>
+            <div id="qr-reader"></div>
             <div class="qr-overlay">
               <div class="qr-frame"><div class="qr-fi"></div><div class="qr-scan-line"></div></div>
             </div>
             <div class="qr-status" id="qr-status">กำลังค้นหา QR / บาร์โค้ด...</div>
-            <button class="qr-stop-btn" onclick="stopQR()">✕ หยุด</button>
+            <button class="qr-stop-btn" onclick="stopLive()">✕ หยุด</button>
           </div>
 
           <!-- ปุ่มเปิดกล้อง -->
-          <div class="ocr-zone" id="qr-start-zone" onclick="startQR()">
+          <div class="ocr-zone" id="qr-start-zone" onclick="startLive()">
             <div class="ocr-zone-icon">📱</div>
             <div class="ocr-zone-title">กดสแกน QR Code / บาร์โค้ด</div>
             <div class="ocr-zone-sub">ใช้กล้อง live สแกนได้ทันที<br>รองรับ QR, CODE128, EAN, Data Matrix</div>
@@ -277,7 +282,8 @@
         </div>
 
         <!-- input file ซ่อน -->
-        <input type="file" id="photo-file" accept="image/*" capture="environment">
+        <input type="file" id="qr-file" accept="image/*" class="hidden">
+        <input type="file" id="photo-file" accept="image/*" capture="environment" class="hidden">
       </div>
     </div>
 
@@ -382,7 +388,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAm
 const S = {
   tracking:'', name:'', phone:'', type:'',
   adminName:'', adminUserId:'', adminType:'',
-  qrStream:null, qrRunning:false, qrDetector:null,
+  qrScanner: null, qrRunning: false,
   activeTab:'qr'
 };
 const $ = id => document.getElementById(id);
@@ -398,6 +404,7 @@ async function init() {
     S.adminName   = p.displayName;
     S.adminUserId = p.userId;
     setLoad('กำลังตรวจสอบสิทธิ์...');
+    
     const auth = await checkAuth(p.userId);
     if (!auth.isAdmin) {
       $('block-name').textContent   = p.displayName;
@@ -416,35 +423,12 @@ async function init() {
     $('photo-file').addEventListener('change', onOCRPhoto);
     $('ocr-retry-btn').addEventListener('click', onRetry);
 
-    // ตรวจ BarcodeDetector (live scan)
-    if (typeof BarcodeDetector !== 'undefined') {
-      try {
-        const fmts = await BarcodeDetector.getSupportedFormats();
-        if (fmts.length > 0) {
-          S.qrDetector = new BarcodeDetector({
-            formats: ['qr_code','code_128','code_39','ean_13','ean_8',
-                      'data_matrix','itf','pdf417','upc_a','upc_e','aztec']
-          });
-        }
-      } catch(e) {}
-    }
-    // Tab QR เริ่มที่ถ่ายรูปเสมอ (live scan เป็น bonus ถ้าได้)
-    updateQRZoneUI();
+    // เริ่มต้น Html5Qrcode Scanner (เพียงกำหนดออบเจ็กต์เตรียมไว้)
+    S.qrScanner = new Html5Qrcode("qr-reader");
 
   } catch(e) {
     setLoad('❌ ' + e.message);
     setTimeout(() => show('main'), 1500);
-  }
-}
-
-function updateQRZoneUI() {
-  // ถ้า browser รองรับ live → แสดงตัวเลือก, ไม่รองรับ → แสดงแค่ถ่ายรูป
-  if (S.qrDetector) {
-    $('qr-live-btn').classList.remove('hidden');
-    $('qr-zone-sub').textContent = 'ถ่ายรูปบาร์โค้ด/QR Code — AI จะอ่านเลขพัสดุให้\nหรือกด "สแกน Live" เพื่อใช้กล้องแบบ real-time';
-  } else {
-    $('qr-live-btn').classList.add('hidden');
-    $('qr-zone-sub').textContent = 'ถ่ายรูปบาร์โค้ด หรือ QR Code\nAI จะอ่านเลขพัสดุให้อัตโนมัติ';
   }
 }
 
@@ -477,13 +461,28 @@ function onRetry() {
   $('btn-next1').classList.add('hidden');
   clearSbar();
   if (S.activeTab === 'qr') {
-    $('qr-zone').style.display = '';
+    $('qr-start-zone').style.display = '';
     $('qr-wrap').classList.remove('show');
   }
 }
 
 // ============================================================
-// TAB QR: ถ่ายรูป → decode tracking เท่านั้น (เร็ว + แม่น)
+// COMMON SUCCESS HANDLER
+// ============================================================
+function handleScanSuccess(tracking) {
+  S.tracking = tracking;
+  S.name = ''; S.phone = ''; S.type = '';
+  $('ocr-tracking').textContent = tracking;
+  $('ocr-name').textContent     = '(กรอกในขั้นตอนถัดไป)';
+  $('ocr-phone').textContent    = '(กรอกในขั้นตอนถัดไป)';
+  $('ocr-result').classList.add('show');
+  setQRZone('done');
+  $('btn-next1').classList.remove('hidden');
+  setSbar('success', '✅ เลขพัสดุ: ' + tracking);
+}
+
+// ============================================================
+// TAB QR: ถ่ายรูป → decode tracking
 // ============================================================
 function triggerQRPhoto() {
   $('qr-file').value = '';
@@ -502,39 +501,26 @@ async function onQRPhoto(e) {
   clearSbar();
 
   try {
-    const url = URL.createObjectURL(file);
-    let tracking = null;
-
-    // วิธีที่ 1: BarcodeDetector จากรูปโดยตรง (Android)
-    if (S.qrDetector) {
-      try {
-        const img = new Image();
-        await new Promise((res, rej) => { img.onload=res; img.onerror=rej; img.src=url; });
-        const codes = await S.qrDetector.detect(img);
-        if (codes.length > 0) tracking = parseTracking(codes[0].rawValue);
-      } catch(e) {}
+    // 1. ลองอ่านผ่าน Html5Qrcode แบบ Local ก่อน
+    try {
+      const decodedText = await S.qrScanner.scanFile(file, true);
+      const tracking = parseTracking(decodedText);
+      if (tracking) {
+        handleScanSuccess(tracking);
+        return; // อ่านได้ ไม่ต้องส่ง AI
+      }
+    } catch (localError) {
+      console.log('Local QR scan fail, falling back to AI.', localError);
     }
 
-    // วิธีที่ 2: ส่ง Claude ถ้ายังไม่ได้ tracking
-    if (!tracking) {
-      $('qr-spin-txt').textContent = 'AI กำลังอ่านบาร์โค้ด...';
-      const b64 = await resizeToBase64(file, 1200);
-      const result = await callGAS('ocr_barcode', { imageBase64:b64, mimeType:'image/jpeg' });
-      tracking = result.tracking || null;
-    }
-
-    URL.revokeObjectURL(url);
+    // 2. ถ้าไม่ได้ ให้ส่งให้ AI ช่วยอ่าน (Fallback)
+    $('qr-spin-txt').textContent = 'AI กำลังอ่านบาร์โค้ด...';
+    const b64 = await resizeToBase64(file, 1200);
+    const result = await callGAS('ocr_barcode', { imageBase64:b64, mimeType:'image/jpeg' });
+    const tracking = result.tracking || null;
 
     if (tracking) {
-      S.tracking = tracking;
-      S.name = ''; S.phone = ''; S.type = '';
-      $('ocr-tracking').textContent = tracking;
-      $('ocr-name').textContent     = '(กรอกในขั้นตอนถัดไป)';
-      $('ocr-phone').textContent    = '(กรอกในขั้นตอนถัดไป)';
-      $('ocr-result').classList.add('show');
-      setQRZone('done');
-      $('btn-next1').classList.remove('hidden');
-      setSbar('success', '✅ เลขพัสดุ: ' + tracking);
+      handleScanSuccess(tracking);
     } else {
       setQRZone('idle');
       setSbar('warning', '⚠️ อ่านบาร์โค้ดไม่ได้ — ลองถ่ายใหม่ให้บาร์โค้ดอยู่กลางภาพ แสงสว่างเพียงพอ');
@@ -544,6 +530,7 @@ async function onQRPhoto(e) {
     setSbar('error', '❌ ' + err.message);
   } finally {
     $('qr-spin').classList.remove('show');
+    $('qr-file').value = '';
   }
 }
 
@@ -559,92 +546,79 @@ function parseTracking(raw) {
 }
 
 function setQRZone(state) {
-  const zone = $('qr-zone');
+  const zone = $('qr-start-zone');
   if (state === 'scanning') {
     zone.style.display = '';
     zone.className = 'ocr-zone scanning';
   } else if (state === 'done') {
-    zone.className = 'ocr-zone done';
-    zone.innerHTML = '<div class="ocr-zone-icon">✅</div>'
-      + '<div class="ocr-zone-title" style="color:var(--green)">อ่านสำเร็จ!</div>'
-      + '<div class="ocr-zone-sub">กดถัดไปเพื่อตรวจสอบ<br>หรือ <u onclick="triggerQRPhoto()" style="color:var(--blue);cursor:pointer">ถ่ายใหม่</u></div>';
+    zone.style.display = 'none'; // ซ่อนปุ่มกล้องเมื่อสแกนได้แล้ว
   } else {
     zone.style.display = '';
     zone.className = 'ocr-zone';
-    zone.innerHTML = '<div class="ocr-zone-icon">🔲</div>'
-      + '<div class="ocr-zone-title">ถ่ายรูปบาร์โค้ด / QR Code</div>'
-      + '<div class="ocr-zone-sub" id="qr-zone-sub">ถ่ายรูปบาร์โค้ด หรือ QR Code<br>AI จะอ่านเลขพัสดุให้อัตโนมัติ</div>';
-    zone.onclick = triggerQRPhoto;
-    updateQRZoneUI();
+    zone.innerHTML = '<div class="ocr-zone-icon">📱</div>'
+      + '<div class="ocr-zone-title">กดสแกน QR Code / บาร์โค้ด</div>'
+      + '<div class="ocr-zone-sub">ใช้กล้อง live สแกนได้ทันที<br>รองรับ QR, CODE128, EAN, Data Matrix</div>';
   }
 }
 
 // ============================================================
-// LIVE SCAN (bonus สำหรับ Android)
+// LIVE SCAN (ด้วย html5-qrcode API) รองรับทั้ง iOS / Android
 // ============================================================
 async function startLive() {
-  if (!S.qrDetector) return;
-  $('qr-zone').style.display = 'none';
+  if (!S.qrScanner) S.qrScanner = new Html5Qrcode("qr-reader");
+
+  $('qr-start-zone').style.display = 'none';
   $('qr-spin').classList.add('show');
   $('qr-spin-txt').textContent = 'กำลังเปิดกล้อง...';
+
   try {
-    S.qrStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} },
-      audio: false
-    });
-    const vid = $('qr-video');
-    vid.srcObject = S.qrStream;
-    await vid.play();
+    // กำหนด config ให้แสกนแม่นยำขึ้น
+    const config = {
+      fps: 10,
+      aspectRatio: 1.0, 
+      disableFlip: false 
+    };
+
+    await S.qrScanner.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText, decodedResult) => {
+        // ทำงานเมื่ออ่านสำเร็จ
+        const tracking = parseTracking(decodedText);
+        if (tracking) {
+          stopLive();
+          handleScanSuccess(tracking);
+        }
+      },
+      (errorMessage) => {
+        // กรณีอ่านระหว่างเฟรมไม่ได้ (ปล่อยผ่าน)
+      }
+    );
+
     $('qr-wrap').classList.add('show');
     $('qr-spin').classList.remove('show');
     $('qr-status').textContent = 'กำลังค้นหาบาร์โค้ด / QR Code...';
     S.qrRunning = true;
-    runLiveDetect(vid);
+
   } catch(err) {
     $('qr-spin').classList.remove('show');
-    $('qr-zone').style.display = '';
-    setSbar('warning', '⚠️ เปิดกล้องไม่ได้ — ใช้ปุ่มถ่ายรูปแทน');
-  }
-}
-
-async function runLiveDetect(vid) {
-  while (S.qrRunning) {
-    try {
-      if (vid.readyState >= 2) {
-        const codes = await S.qrDetector.detect(vid);
-        if (codes.length > 0) {
-          const tracking = parseTracking(codes[0].rawValue);
-          if (tracking) {
-            S.qrRunning = false;
-            stopLive();
-            S.tracking = tracking;
-            S.name = ''; S.phone = ''; S.type = '';
-            $('ocr-tracking').textContent = tracking;
-            $('ocr-name').textContent     = '(กรอกในขั้นตอนถัดไป)';
-            $('ocr-phone').textContent    = '(กรอกในขั้นตอนถัดไป)';
-            $('ocr-result').classList.add('show');
-            setQRZone('done');
-            $('btn-next1').classList.remove('hidden');
-            setSbar('success', '✅ สแกนได้: ' + tracking);
-            return;
-          }
-        }
-      }
-    } catch(e) {}
-    await new Promise(r => setTimeout(r, 100));
+    $('qr-start-zone').style.display = '';
+    setSbar('warning', '⚠️ เปิดกล้องไม่ได้ — ใช้ปุ่ม "ถ่ายรูป + AI อ่าน" แทน');
+    console.error("Camera start error", err);
   }
 }
 
 function stopLive() {
   S.qrRunning = false;
-  if (S.qrStream) { S.qrStream.getTracks().forEach(t => t.stop()); S.qrStream = null; }
-  $('qr-video').srcObject = null;
+  if (S.qrScanner && S.qrScanner.isScanning) {
+    S.qrScanner.stop().catch(err => console.log("Stop camera error:", err));
+  }
   $('qr-wrap').classList.remove('show');
   $('qr-spin').classList.remove('show');
 }
 
 // ============================================================
-// TAB OCR: ถ่ายรูป → Claude อ่านทุกอย่าง
+// TAB OCR: ถ่ายรูป → AI อ่านทุกอย่าง
 // ============================================================
 function triggerCamera() {
   $('photo-file').value = '';
@@ -669,18 +643,14 @@ async function onOCRPhoto(e) {
   try {
     const b64 = await resizeToBase64(file, 1200);
 
-    // ลอง BarcodeDetector ก่อน (ถ้ามี)
+    // ลองอ่าน Barcode Locally ก่อน (ช่วยลดภาระ AI / แม่นยำขึ้น)
     let qrTracking = null;
-    if (S.qrDetector) {
-      try {
-        const img = new Image();
-        await new Promise((res, rej) => { img.onload=res; img.onerror=rej; img.src=url; });
-        const codes = await S.qrDetector.detect(img);
-        if (codes.length > 0) qrTracking = parseTracking(codes[0].rawValue);
-      } catch(e) {}
-    }
+    try {
+      const decodedText = await S.qrScanner.scanFile(file, true);
+      qrTracking = parseTracking(decodedText);
+    } catch(e) { }
 
-    // OCR อ่านชื่อ + เบอร์ + (tracking ถ้ายังไม่ได้)
+    // ส่งเข้า GAS OCR อ่านชื่อ + เบอร์
     const result = await callGAS('ocr_label', { imageBase64:b64, mimeType:'image/jpeg' });
     if (qrTracking) result.tracking = qrTracking;
 
@@ -719,7 +689,7 @@ async function onOCRPhoto(e) {
 }
 
 // ============================================================
-// GAS CALL (FormData — ไม่มี CORS preflight)
+// GAS CALL
 // ============================================================
 async function callGAS(action, extra) {
   const form = new FormData();
@@ -875,10 +845,12 @@ function resetAll() {
   $('btn-next1').classList.add('hidden');
   $('manual-box').classList.add('hidden');
   $('btn-manual').classList.remove('hidden');
+  
   $('ocr-zone').className='ocr-zone';
   $('ocr-zone').innerHTML='<div class="ocr-zone-icon">📷</div>'
     +'<div class="ocr-zone-title">กดถ่ายรูปพัสดุ</div>'
     +'<div class="ocr-zone-sub">ถ่ายให้เห็น<strong>บาร์โค้ด + ชื่อผู้รับ + เบอร์โทร</strong><br>ในรูปเดียว — AI จะอ่านให้อัตโนมัติ</div>';
+  
   setQRZone('idle');
   show('main'); goStep1();
 }
