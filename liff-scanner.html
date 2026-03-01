@@ -146,7 +146,40 @@
   .mt-8    { margin-top:8px; }
   .text-muted { color:var(--text-muted); font-size:12px; }
   #photo-input { display:none; }
+  #ocr-input    { display:none; }
   .scan-hint { font-size:12px; color:var(--text-muted); text-align:center; margin-top:8px; line-height:1.5; }
+
+  /* OCR button & overlay */
+  .ocr-btn {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    width:100%; padding:11px 16px; border-radius:10px; border:1.5px dashed var(--blue);
+    background:rgba(56,139,253,0.06); color:var(--blue);
+    font-size:14px; font-weight:600; cursor:pointer; margin-top:10px;
+    transition:background 0.2s, border-color 0.2s;
+  }
+  .ocr-btn:active { background:rgba(56,139,253,0.15); }
+  .ocr-btn:disabled { opacity:0.4; pointer-events:none; }
+  .ocr-loading {
+    display:none; align-items:center; gap:10px;
+    font-size:13px; color:var(--blue); margin-top:10px; padding:10px 14px;
+    background:rgba(56,139,253,0.08); border-radius:10px;
+    border:1px solid rgba(56,139,253,0.2);
+  }
+  .ocr-loading.show { display:flex; }
+  .ocr-spinner {
+    width:18px; height:18px; border:2px solid rgba(56,139,253,0.3);
+    border-top-color:var(--blue); border-radius:50%;
+    animation:spin 0.8s linear infinite; flex-shrink:0;
+  }
+  .ocr-filled {
+    display:none; align-items:flex-start; gap:8px;
+    font-size:12px; color:var(--green); margin-top:8px; padding:10px 14px;
+    background:rgba(0,200,83,0.07); border-radius:10px;
+    border:1px solid rgba(0,200,83,0.2); line-height:1.6;
+  }
+  .ocr-filled.show { display:flex; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .field-ocr-hint { font-size:11px; color:var(--blue); margin-top:3px; opacity:0.8; }
 </style>
 </head>
 <body>
@@ -187,7 +220,7 @@
   <div class="header-icon">📦</div>
   <div>
     <div class="header-title">บันทึกพัสดุเข้า</div>
-    <div class="header-sub">ระบบพัสดุ กองรักษาการ ป.5 พัน.5</div>
+    <div class="header-sub">ระบบพัสดุ กองรักษาการ ป.5</div>
   </div>
   <div class="admin-badge" id="admin-name-badge">...</div>
 </div>
@@ -284,6 +317,21 @@
     <div class="form-section">
       <div class="form-header">📝 ข้อมูลผู้รับพัสดุ</div>
       <div class="form-body">
+
+        <!-- OCR: ถ่ายรูปป้ายพัสดุ → กรอกอัตโนมัติ -->
+        <input type="file" id="ocr-input" accept="image/*" capture="environment">
+        <button class="ocr-btn" id="btn-ocr" onclick="startOCR()">
+          <span>🔍</span> ถ่ายรูปป้ายพัสดุ — กรอกชื่อ+เบอร์อัตโนมัติ
+        </button>
+        <div class="ocr-loading" id="ocr-loading">
+          <div class="ocr-spinner"></div>
+          <span>AI กำลังอ่านข้อมูลจากรูปภาพ...</span>
+        </div>
+        <div class="ocr-filled" id="ocr-filled">
+          <span>✅</span>
+          <span id="ocr-filled-text"></span>
+        </div>
+
         <div class="field">
           <label>ชื่อ-ยศ ผู้รับ <span>*</span></label>
           <input type="text" id="f-name" placeholder="เช่น จ.ส.อ. สมชาย ใจดี" oninput="checkFormFilled()">
@@ -355,6 +403,92 @@ const S = {
 // ============================================================
 // INIT
 // ============================================================
+// ============================================================
+// OCR — ถ่ายรูปป้ายพัสดุ → Claude Vision → กรอกฟอร์มอัตโนมัติ
+// ============================================================
+function startOCR() {
+  const inp = $('ocr-input');
+  inp.value = '';
+  inp.onchange = onOCRPhoto;
+  inp.click();
+}
+
+async function onOCRPhoto(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  // แสดง loading
+  $('btn-ocr').disabled = true;
+  $('ocr-loading').classList.add('show');
+  $('ocr-filled').classList.remove('show');
+
+  try {
+    // resize ก่อนส่ง (ลดขนาด + ประหยัด token)
+    const b64 = await fileToBase64Resized(file, 1000);
+
+    // เรียก GAS → Claude Vision
+    // GAS ไม่รองรับ CORS preflight → ส่งเป็น form-urlencoded
+    const ocrForm = new FormData();
+    ocrForm.append('payload', JSON.stringify({
+      action: 'ocr_label',
+      imageBase64: b64,
+      mimeType: 'image/jpeg'
+    }));
+    const resp = await fetch(GAS_URL, { method: 'POST', body: ocrForm });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (data.status !== 'ok' || !data.result) {
+      throw new Error(data.message || 'อ่านข้อมูลไม่ได้');
+    }
+
+    const r = data.result;
+
+    // กรอกฟอร์มอัตโนมัติ
+    let filled = [];
+    if (r.name && r.name.trim()) {
+      $('f-name').value = r.name.trim();
+      filled.push('ชื่อ: ' + r.name.trim());
+    }
+    if (r.phone && r.phone.trim() && r.phone !== 'ไม่พบ') {
+      const phone = r.phone.replace(/\D/g, '').slice(0, 10);
+      if (phone.length >= 9) {
+        $('f-phone').value = phone;
+        filled.push('เบอร์: ' + phone);
+      }
+    }
+    if (r.type && r.type !== 'ไม่พบ') {
+      // map ค่าที่ได้จาก OCR → option value
+      const typeMap = {
+        'กล่อง': 'กล่อง', 'ซอง': 'ซอง', 'ถุง': 'ถุง',
+        'ม้วน': 'ม้วน', 'box': 'กล่อง', 'envelope': 'ซอง', 'bag': 'ถุง'
+      };
+      const matched = typeMap[r.type.toLowerCase()] || typeMap[r.type] || '';
+      if (matched) {
+        $('f-type').value = matched;
+        filled.push('ลักษณะ: ' + matched);
+      }
+    }
+
+    checkFormFilled();
+
+    if (filled.length > 0) {
+      $('ocr-filled-text').textContent = 'กรอกอัตโนมัติแล้ว — ' + filled.join(' · ') + '
+(ตรวจสอบและแก้ไขได้)';
+      $('ocr-filled').classList.add('show');
+    } else {
+      showStatus('warning', '⚠️ อ่านข้อมูลไม่ได้ — ลองถ่ายใหม่ให้เห็นชื่อ-เบอร์ชัดๆ');
+    }
+
+  } catch(err) {
+    showStatus('error', '❌ OCR: ' + err.message);
+  } finally {
+    $('ocr-loading').classList.remove('show');
+    $('btn-ocr').disabled = false;
+  }
+}
+
 async function init() {
   try {
     await liff.init({ liffId: LIFF_ID });
@@ -577,15 +711,13 @@ async function decodeViaGAS(file) {
   try {
     // แปลงไฟล์เป็น base64 (resize ก่อนเพื่อลดขนาด)
     const b64 = await fileToBase64Resized(file, 1200);
-    const resp = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'decode_barcode',
-        imageBase64: b64,
-        mimeType: 'image/jpeg'
-      })
-    });
+    const decodeForm = new FormData();
+    decodeForm.append('payload', JSON.stringify({
+      action: 'decode_barcode',
+      imageBase64: b64,
+      mimeType: 'image/jpeg'
+    }));
+    const resp = await fetch(GAS_URL, { method: 'POST', body: decodeForm });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     return data.result || null;
@@ -732,10 +864,11 @@ async function submitPackage() {
     showScreen('success');
   } catch(e) {
     try {
-      const r = await fetch(GAS_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'liff_submit', userId: S.adminUserId, tracking, name, phone, type })
-      });
+      const submitForm = new FormData();
+      submitForm.append('payload', JSON.stringify({
+        action: 'liff_submit', userId: S.adminUserId, tracking, name, phone, type
+      }));
+      const r = await fetch(GAS_URL, { method: 'POST', body: submitForm });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       $('success-tracking-display').textContent = tracking;
       showScreen('success');
