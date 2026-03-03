@@ -4,340 +4,466 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>บันทึกพัสดุ</title>
-<!-- เพิ่ม Library html5-qrcode สำหรับสแกนบาร์โค้ด/QR โค้ดที่รวดเร็วและรองรับทุกอุปกรณ์ -->
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
-  :root {
-    --green:#00c853; --green-dark:#009624; --bg:#0d1117;
-    --surface:#161b22; --surface2:#21262d; --border:#30363d;
-    --text:#e6edf3; --muted:#7d8590; --red:#f85149;
-    --yellow:#d29922; --blue:#388bfd;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
-  /* OVERLAYS */
-  .ov{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px;text-align:center;z-index:9999}
-  .ov.hidden{display:none}
-  .ov-icon{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px}
-  .ov-icon.load{background:rgba(56,139,253,.1);border:2px solid var(--blue);animation:pulse 1.5s ease-in-out infinite}
-  .ov-icon.block{background:rgba(248,81,73,.15);border:2px solid var(--red)}
-  .ov-icon.ok{background:rgba(0,200,83,.15);border:2px solid var(--green)}
-  .ov-title{font-size:20px;font-weight:700}
-  .ov-title.red{color:var(--red)} .ov-title.green{color:var(--green)} .ov-title.blue{color:var(--blue)}
-  .info-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 24px;width:100%;max-width:320px;text-align:left}
-  .info-card .lbl{font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
-  .info-card .val{font-size:15px;font-weight:600}
-  .alert{border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.7;width:100%;max-width:320px;white-space:pre-line;text-align:left}
-  .alert.red{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red)}
-  .alert.green{background:rgba(0,200,83,.1);border:1px solid rgba(0,200,83,.3);color:var(--green)}
-  .alert.muted{background:var(--surface);border:1px solid var(--border);color:var(--muted);text-align:center}
-  .success-id{font-family:'IBM Plex Mono',monospace;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 24px;font-size:15px;font-weight:600;letter-spacing:1px;word-break:break-all;max-width:320px;width:100%;text-align:center}
+:root {
+  --bg:       #080c10;
+  --surface:  #0f1520;
+  --surface2: #161f2e;
+  --border:   #1e2d40;
+  --border2:  #243448;
+  --text:     #d4e4f4;
+  --muted:    #5a7a9a;
+  --green:    #0dff8c;
+  --green-d:  #00cc6a;
+  --blue:     #3d9eff;
+  --blue-d:   #1a7ddb;
+  --red:      #ff4d6d;
+  --yellow:   #ffbe0b;
+  --teal:     #00d4e8;
+  --shadow:   0 8px 32px rgba(0,0,0,.5);
+}
 
-  /* HEADER */
-  .hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
-  .hdr-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--green),var(--green-dark));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-  .hdr-title{font-size:16px;font-weight:700}
-  .hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
-  .badge{margin-left:auto;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
-  .badge.main{border-color:rgba(0,200,83,.5);color:var(--green)}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html { font-size:16px; }
+body { font-family:'Sarabun',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
 
-  /* CONTENT */
-  .content{padding:20px 16px 40px;max-width:500px;margin:0 auto}
+/* ── Noise texture overlay ── */
+body::before {
+  content:''; position:fixed; inset:0; opacity:.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px;
+  pointer-events:none; z-index:0;
+}
 
-  /* STEPS */
-  .steps{display:flex;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-  .step{flex:1;padding:10px 4px;text-align:center;font-size:11px;color:var(--muted);transition:all .3s;border-right:1px solid var(--border)}
-  .step:last-child{border-right:none}
-  .step.active{background:rgba(0,200,83,.1);color:var(--green);font-weight:600}
-  .step.done{color:var(--green)}
-  .step-num{display:block;font-size:16px;font-weight:700;margin-bottom:2px;font-family:'IBM Plex Mono',monospace}
+/* ── OVERLAY (loading/blocked/success) ── */
+.ov {
+  position:fixed; inset:0; background:rgba(8,12,16,.97);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:20px; padding:40px; text-align:center; z-index:9999;
+  backdrop-filter:blur(12px);
+}
+.ov.hidden { display:none; }
+.ov-ring {
+  width:88px; height:88px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:38px;
+  position:relative;
+}
+.ov-ring::before {
+  content:''; position:absolute; inset:-3px; border-radius:50%;
+  border:2px solid transparent; border-top-color:var(--blue);
+  animation:spin .9s linear infinite;
+}
+.ov-ring.ok::before  { border-top-color:var(--green); animation:none; border-color:var(--green); }
+.ov-ring.err::before { border-top-color:var(--red);   animation:none; border-color:var(--red); }
+.ov-title { font-size:22px; font-weight:800; letter-spacing:-.3px; }
+.ov-title.blue  { color:var(--blue); }
+.ov-title.green { color:var(--green); }
+.ov-title.red   { color:var(--red); }
+.ov-sub { font-size:13px; color:var(--muted); line-height:1.7; max-width:280px; white-space:pre-line; }
+.ov-card {
+  background:var(--surface); border:1px solid var(--border2); border-radius:14px;
+  padding:14px 20px; width:100%; max-width:300px; text-align:left;
+}
+.ov-card .lbl { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:5px; }
+.ov-card .val { font-size:15px; font-weight:700; }
+.id-badge {
+  font-family:'IBM Plex Mono',monospace; font-size:16px; font-weight:600;
+  background:linear-gradient(135deg,var(--surface),var(--surface2));
+  border:1px solid var(--border2); border-radius:12px;
+  padding:14px 28px; word-break:break-all; max-width:300px;
+  text-align:center; color:var(--green); letter-spacing:1px;
+}
+.ov-photo { width:100%; max-width:260px; border-radius:14px; object-fit:cover; aspect-ratio:4/3; }
 
-  /* BUTTONS */
-  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border:none;border-radius:10px;font-family:'Sarabun',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;-webkit-appearance:none}
-  .btn:active{transform:scale(.97)}
-  .btn-primary{background:var(--green);color:#000}
-  .btn-primary:hover{background:#00e676}
-  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
-  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-  .btn-row{display:flex;gap:8px}
-  .btn-row .btn-back{flex:0 0 auto;width:auto;padding:14px 20px}
+/* ── HEADER ── */
+.hdr {
+  background:linear-gradient(135deg,var(--surface) 0%,rgba(15,21,32,.95) 100%);
+  border-bottom:1px solid var(--border);
+  padding:14px 18px; display:flex; align-items:center; gap:12px;
+  position:sticky; top:0; z-index:100; backdrop-filter:blur(8px);
+}
+.hdr-logo {
+  width:40px; height:40px; border-radius:12px; flex-shrink:0;
+  background:linear-gradient(135deg,var(--green),var(--teal));
+  display:flex; align-items:center; justify-content:center; font-size:20px;
+  box-shadow:0 4px 14px rgba(13,255,140,.3);
+}
+.hdr-title { font-size:15px; font-weight:800; line-height:1.2; }
+.hdr-sub   { font-size:10px; color:var(--muted); margin-top:2px; letter-spacing:.5px; }
+.badge {
+  margin-left:auto; flex-shrink:0;
+  background:var(--surface2); border:1px solid var(--border2);
+  border-radius:20px; padding:5px 11px; font-size:10px;
+  color:var(--muted); font-family:'IBM Plex Mono',monospace;
+  max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.badge.main { border-color:rgba(13,255,140,.4); color:var(--green); }
 
-  /* CARD */
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:16px;animation:fadeIn .4s ease}
-  .card-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
-  .card-body{padding:16px;display:flex;flex-direction:column;gap:14px}
+/* ── CONTENT ── */
+.content { padding:20px 14px 60px; max-width:480px; margin:0 auto; position:relative; z-index:1; }
 
-  /* OCR ZONE */
-  .ocr-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px 20px;border:2px dashed var(--border);border-radius:14px;cursor:pointer;transition:all .2s;background:var(--surface2);margin-bottom:4px}
-  .ocr-zone:active{background:rgba(56,139,253,.08);border-color:var(--blue)}
-  .ocr-zone.scanning{border-color:var(--blue);background:rgba(56,139,253,.06);animation:borderPulse 1.2s ease-in-out infinite}
-  .ocr-zone.done{border-color:var(--green);background:rgba(0,200,83,.06);animation:none}
-  .ocr-zone-icon{font-size:52px;line-height:1}
-  .ocr-zone-title{font-size:16px;font-weight:700;text-align:center}
-  .ocr-zone-sub{font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
-  @keyframes borderPulse{0%,100%{border-color:var(--blue);box-shadow:0 0 0 0 rgba(56,139,253,.3)}50%{border-color:#6cb6ff;box-shadow:0 0 0 6px rgba(56,139,253,.0)}}
+/* ── STEP INDICATOR ── */
+.steps {
+  display:flex; margin-bottom:22px;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden;
+}
+.step {
+  flex:1; padding:10px 2px; text-align:center; font-size:9px; font-weight:700;
+  color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+  border-right:1px solid var(--border); transition:all .3s;
+}
+.step:last-child { border-right:none; }
+.step-num { display:block; font-size:17px; margin-bottom:2px; font-family:'IBM Plex Mono',monospace; font-weight:600; }
+.step.active { background:rgba(13,255,140,.06); color:var(--green); }
+.step.done   { color:rgba(13,255,140,.6); }
 
-  /* OCR PREVIEW */
-  .preview-wrap{display:none;position:relative;border-radius:12px;overflow:hidden;margin-bottom:8px;aspect-ratio:4/3;background:#000}
-  .preview-wrap.show{display:block}
-  .preview-wrap img{width:100%;height:100%;object-fit:cover}
-  .preview-badge{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:4px 8px;border-radius:20px;backdrop-filter:blur(4px)}
+/* ── STATUS BAR ── */
+.sbar {
+  margin-bottom:14px; border-radius:12px; padding:12px 14px;
+  font-size:13px; display:flex; align-items:flex-start; gap:9px; line-height:1.5;
+  animation:slideIn .25s ease; border:1px solid transparent;
+}
+.sbar.hidden { display:none; }
+.sbar.error   { background:rgba(255,77,109,.08);  border-color:rgba(255,77,109,.25);  color:var(--red); }
+.sbar.success { background:rgba(13,255,140,.07);  border-color:rgba(13,255,140,.25);  color:var(--green); }
+.sbar.info    { background:rgba(61,158,255,.08);  border-color:rgba(61,158,255,.25);  color:var(--blue); }
+.sbar.warning { background:rgba(255,190,11,.08);  border-color:rgba(255,190,11,.25);  color:var(--yellow); }
+@keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
 
-  /* SPINNER */
-  .spin-wrap{display:none;align-items:center;justify-content:center;gap:12px;padding:16px;background:rgba(56,139,253,.08);border-radius:12px;border:1px solid rgba(56,139,253,.2)}
-  .spin-wrap.show{display:flex}
-  .spinner{width:22px;height:22px;border:2.5px solid rgba(56,139,253,.3);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
-  .spin-text{font-size:13px;color:var(--blue);font-weight:600}
-  @keyframes spin{to{transform:rotate(360deg)}}
+/* ── CARD ── */
+.card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:18px; overflow:hidden; margin-bottom:14px;
+  animation:fadeUp .35s ease;
+}
+.card-hdr {
+  padding:13px 16px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700;
+}
+.card-hdr .sub { font-size:10px; font-weight:400; color:var(--muted); margin-left:auto; }
+.card-body { padding:16px; display:flex; flex-direction:column; gap:14px; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 
-  /* OCR RESULT BOX */
-  .ocr-result{display:none;flex-direction:column;gap:8px;padding:14px;background:rgba(0,200,83,.06);border-radius:12px;border:1px solid rgba(0,200,83,.25)}
-  .ocr-result.show{display:flex}
-  .ocr-result-title{font-size:12px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
-  .ocr-row{display:flex;gap:10px;align-items:flex-start}
-  .ocr-row-lbl{font-size:11px;color:var(--muted);width:80px;flex-shrink:0;padding-top:2px}
-  .ocr-row-val{font-size:13px;font-weight:600;word-break:break-all;font-family:'IBM Plex Mono',monospace;color:var(--text)}
-  .ocr-retry{font-size:12px;color:var(--blue);text-decoration:underline;cursor:pointer;margin-top:4px;text-align:center}
+/* ── TABS ── */
+.tabs {
+  display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:12px; padding:4px;
+}
+.tab {
+  flex:1; padding:9px 4px; text-align:center; font-size:12px; font-weight:700;
+  color:var(--muted); border-radius:9px; cursor:pointer; transition:all .2s;
+  border:none; background:none; font-family:'Sarabun',sans-serif;
+}
+.tab.active { background:var(--surface); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,.4); }
 
-  /* FORM */
-  .field{display:flex;flex-direction:column;gap:6px}
-  .field label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-  .field label span{color:var(--red)}
-  .field-row{display:flex;gap:8px;align-items:flex-end}
-  .field-row .field{flex:1}
-  input,select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;font-family:'Sarabun',sans-serif;font-size:15px;color:var(--text);outline:none;transition:border-color .2s;-webkit-appearance:none}
-  input:focus,select:focus{border-color:var(--green)}
-  input::placeholder{color:var(--muted)}
-  input.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
-  select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237d8590' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
-  select option{background:var(--surface2)}
-  input.ai-filled{border-color:rgba(0,200,83,.5);background:rgba(0,200,83,.04)}
+/* ── SCAN ZONE ── */
+.zone {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:28px 20px; border:2px dashed var(--border2);
+  border-radius:16px; cursor:pointer; transition:all .22s; background:var(--surface2);
+  text-align:center;
+}
+.zone:active { transform:scale(.98); }
+.zone.scanning { border-color:var(--blue); background:rgba(61,158,255,.05); animation:pulseBorder 1.3s ease-in-out infinite; }
+.zone.done { border-color:var(--green); background:rgba(13,255,140,.04); cursor:default; }
+.zone-icon  { font-size:48px; line-height:1; }
+.zone-title { font-size:15px; font-weight:700; }
+.zone-sub   { font-size:12px; color:var(--muted); line-height:1.6; }
+@keyframes pulseBorder { 0%,100%{border-color:var(--blue);} 50%{border-color:var(--teal);} }
 
-  /* CONFIRM */
-  .confirm-panel{background:var(--surface);border:1px solid rgba(0,200,83,.3);border-radius:16px;overflow:hidden;margin-bottom:16px;animation:fadeIn .3s ease}
-  .confirm-hdr{padding:14px 16px;background:rgba(0,200,83,.1);border-bottom:1px solid rgba(0,200,83,.2);font-weight:700;font-size:14px;color:var(--green)}
-  .confirm-row{display:flex;padding:11px 16px;border-bottom:1px solid var(--border);gap:12px}
-  .confirm-row:last-child{border-bottom:none}
-  .confirm-key{font-size:12px;color:var(--muted);width:90px;flex-shrink:0;padding-top:2px}
-  .confirm-val{font-size:14px;font-weight:500;word-break:break-all}
-  .confirm-val.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
+/* ── PHOTO STEP ── */
+.photo-zone {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:24px 20px; border:2px dashed var(--border2);
+  border-radius:16px; cursor:pointer; transition:all .22s; background:var(--surface2);
+  text-align:center;
+}
+.photo-zone:active { transform:scale(.98); }
+.photo-zone.done { border-color:var(--green); background:rgba(13,255,140,.04); }
+.photo-preview-wrap { display:none; border-radius:14px; overflow:hidden; aspect-ratio:4/3; background:#000; }
+.photo-preview-wrap.show { display:block; }
+.photo-preview-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
 
-  /* STATUS */
-  .sbar{margin-bottom:16px;border-radius:10px;padding:12px 14px;font-size:13px;display:flex;align-items:center;gap:8px;animation:fadeIn .3s ease;line-height:1.5}
-  .sbar.error{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red)}
-  .sbar.success{background:rgba(0,200,83,.1);border:1px solid rgba(0,200,83,.3);color:var(--green)}
-  .sbar.info{background:rgba(56,139,253,.1);border:1px solid rgba(56,139,253,.3);color:var(--blue)}
-  .sbar.warning{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);color:var(--yellow)}
-  .phone-hint{font-size:11px;margin-top:3px}
+/* ── OCR RESULT ── */
+.ocr-result {
+  display:none; flex-direction:column; gap:8px; padding:14px;
+  background:rgba(13,255,140,.04); border:1px solid rgba(13,255,140,.2); border-radius:13px;
+}
+.ocr-result.show { display:flex; }
+.ocr-result-hdr  { font-size:11px; font-weight:700; color:var(--green); text-transform:uppercase; letter-spacing:.7px; }
+.ocr-row { display:flex; gap:10px; }
+.ocr-lbl { font-size:11px; color:var(--muted); width:72px; flex-shrink:0; padding-top:2px; }
+.ocr-val { font-size:13px; font-weight:600; font-family:'IBM Plex Mono',monospace; word-break:break-all; }
+.ocr-retry { font-size:12px; color:var(--blue); text-decoration:underline; cursor:pointer; text-align:center; margin-top:2px; }
 
-  /* UTILS */
-  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-  @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.7}}
-  .hidden{display:none!important}
-  .mt8{margin-top:8px}
+/* ── QR LIVE ── */
+.qr-wrap { display:none; position:relative; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; }
+.qr-wrap.show { display:block; }
+#qr-reader { width:100%; height:100%; display:block; }
+#qr-reader video { width:100%!important; height:100%!important; object-fit:cover!important; }
+#qr-reader__dashboard_section_csr { display:none!important; }
+.qr-overlay { position:absolute; inset:0; pointer-events:none; z-index:10; display:flex; align-items:center; justify-content:center; }
+.qr-frame  { width:58%; aspect-ratio:1; position:relative; }
+.qr-corner { position:absolute; width:22px; height:22px; border:3px solid var(--green); }
+.qr-corner.tl { top:0; left:0; border-right:0; border-bottom:0; border-radius:2px 0 0 0; }
+.qr-corner.tr { top:0; right:0; border-left:0; border-bottom:0; border-radius:0 2px 0 0; }
+.qr-corner.bl { bottom:0; left:0; border-right:0; border-top:0; border-radius:0 0 0 2px; }
+.qr-corner.br { bottom:0; right:0; border-left:0; border-top:0; border-radius:0 0 2px 0; }
+.qr-line { position:absolute; left:4%; right:4%; height:2px; background:linear-gradient(90deg,transparent,var(--green),transparent); box-shadow:0 0 10px var(--green); animation:qrScan 2s ease-in-out infinite; }
+@keyframes qrScan { 0%,100%{top:6%;} 50%{top:90%;} }
+.qr-hint { position:absolute; bottom:10px; inset-x:0; text-align:center; font-size:11px; color:rgba(255,255,255,.7); padding:6px; background:rgba(0,0,0,.45); backdrop-filter:blur(4px); }
+.qr-stop { position:absolute; top:10px; right:10px; background:rgba(0,0,0,.55); color:#fff; border:none; border-radius:20px; padding:6px 12px; font-size:11px; cursor:pointer; backdrop-filter:blur(4px); font-family:'Sarabun',sans-serif; z-index:20; }
+.preview-wrap { display:none; border-radius:14px; overflow:hidden; aspect-ratio:4/3; background:#000; position:relative; margin-bottom:6px; }
+.preview-wrap.show { display:block; }
+.preview-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+.preview-lbl { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,.6); font-size:11px; padding:4px 8px; border-radius:20px; backdrop-filter:blur(4px); }
 
-  /* QR / LIVE SCANNER OVERRIDE FOR HTML5-QRCODE */
-  .scan-tabs{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:3px;margin-bottom:14px}
-  .scan-tab{flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);border-radius:8px;cursor:pointer;transition:all .2s;border:none;background:none;font-family:'Sarabun',sans-serif}
-  .scan-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
-  .qr-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden;display:none}
-  .qr-wrap.show{display:block}
-  #qr-reader{width:100%;height:100%;object-fit:cover;display:block}
-  #qr-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
-  /* ซ่อนปุ่ม default ของไลบรารีบางตัว */
-  #qr-reader__dashboard_section_csr { display: none !important; }
+/* ── SPINNER ── */
+.spin-row { display:none; align-items:center; gap:11px; padding:14px; background:rgba(61,158,255,.07); border:1px solid rgba(61,158,255,.2); border-radius:12px; }
+.spin-row.show { display:flex; }
+.spinner { width:20px; height:20px; border:2.5px solid rgba(61,158,255,.25); border-top-color:var(--blue); border-radius:50%; animation:spin .75s linear infinite; flex-shrink:0; }
+@keyframes spin { to{transform:rotate(360deg);} }
+.spin-txt { font-size:13px; color:var(--blue); font-weight:600; }
 
-  .qr-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10}
-  .qr-frame{width:60%;aspect-ratio:1/1;position:relative}
-  .qr-frame::before,.qr-frame::after,.qr-fi::before,.qr-fi::after{content:'';position:absolute;width:24px;height:24px;border-color:var(--green);border-style:solid}
-  .qr-frame::before{top:0;left:0;border-width:3px 0 0 3px}
-  .qr-frame::after{top:0;right:0;border-width:3px 3px 0 0}
-  .qr-fi::before{bottom:0;left:0;border-width:0 0 3px 3px}
-  .qr-fi::after{bottom:0;right:0;border-width:0 3px 3px 0}
-  .qr-scan-line{position:absolute;left:5%;right:5%;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);animation:qrScan 2s ease-in-out infinite;box-shadow:0 0 8px var(--green)}
-  @keyframes qrScan{0%,100%{top:8%}50%{top:88%}}
-  .qr-status{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.5);padding:6px;backdrop-filter:blur(4px);z-index:10}
-  .qr-stop-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;backdrop-filter:blur(4px);font-family:'Sarabun',sans-serif;z-index:20}
+/* ── FORM FIELDS ── */
+.field { display:flex; flex-direction:column; gap:6px; }
+.field-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); }
+.field-label span { color:var(--red); margin-left:2px; }
+.field-row { display:flex; gap:8px; align-items:flex-end; }
+.field-row .field { flex:1; }
+input, select {
+  width:100%; background:var(--surface2); border:1px solid var(--border2);
+  border-radius:10px; padding:12px 14px; font-family:'Sarabun',sans-serif;
+  font-size:15px; color:var(--text); outline:none; transition:border-color .2s;
+  -webkit-appearance:none;
+}
+input:focus, select:focus { border-color:var(--green); background:rgba(13,255,140,.03); }
+input::placeholder { color:var(--muted); }
+input.mono { font-family:'IBM Plex Mono',monospace; font-size:13px; }
+input.ai { border-color:rgba(13,255,140,.4); background:rgba(13,255,140,.04); }
+select {
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a7a9a' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 14px center; padding-right:36px;
+}
+select option { background:var(--surface2); }
+.ph-hint { font-size:11px; margin-top:3px; }
+
+/* ── BUTTONS ── */
+.btn {
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; padding:14px; border:none; border-radius:12px;
+  font-family:'Sarabun',sans-serif; font-size:15px; font-weight:700;
+  cursor:pointer; transition:all .18s; -webkit-appearance:none;
+}
+.btn:active { transform:scale(.97); }
+.btn-primary  { background:linear-gradient(135deg,var(--green),var(--teal)); color:#000; box-shadow:0 4px 20px rgba(13,255,140,.25); }
+.btn-primary:hover { box-shadow:0 6px 24px rgba(13,255,140,.4); }
+.btn-ghost    { background:var(--surface2); color:var(--text); border:1px solid var(--border2); }
+.btn-danger   { background:rgba(255,77,109,.1); color:var(--red); border:1px solid rgba(255,77,109,.25); }
+.btn:disabled { opacity:.35; cursor:not-allowed; transform:none!important; box-shadow:none!important; }
+.btn-row { display:flex; gap:8px; }
+.btn-back { flex:0 0 auto!important; width:auto!important; padding:14px 18px!important; }
+
+/* ── CONFIRM TABLE ── */
+.confirm-card {
+  background:var(--surface); border:1px solid rgba(13,255,140,.2); border-radius:18px;
+  overflow:hidden; margin-bottom:14px; animation:fadeUp .3s ease;
+}
+.confirm-hdr { padding:13px 16px; background:rgba(13,255,140,.07); border-bottom:1px solid rgba(13,255,140,.15); font-size:13px; font-weight:700; color:var(--green); }
+.confirm-row { display:flex; padding:10px 16px; border-bottom:1px solid var(--border); gap:12px; }
+.confirm-row:last-child { border-bottom:none; }
+.confirm-key { font-size:11px; color:var(--muted); width:84px; flex-shrink:0; padding-top:2px; font-weight:600; }
+.confirm-val { font-size:14px; word-break:break-all; }
+.confirm-val.mono { font-family:'IBM Plex Mono',monospace; font-size:13px; }
+.confirm-photo { width:100%; border-radius:10px; object-fit:cover; aspect-ratio:4/3; margin-top:6px; }
+
+/* ── TG BADGE ── */
+.tg-row {
+  display:flex; align-items:center; gap:8px; padding:11px 14px;
+  background:rgba(61,158,255,.06); border:1px solid rgba(61,158,255,.18);
+  border-radius:12px; font-size:12px; color:var(--blue);
+}
+.tg-dot { width:7px; height:7px; border-radius:50%; background:var(--blue); flex-shrink:0; animation:pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.5;transform:scale(1.3);} }
+
+/* ── SUCCESS SCREEN ── */
+.ov-actions { display:flex; flex-direction:column; gap:10px; width:100%; max-width:300px; }
+.tag-ok   { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:6px 12px; border-radius:20px; background:rgba(13,255,140,.12); color:var(--green); font-weight:600; }
+.tag-skip { background:rgba(90,122,154,.15); color:var(--muted); }
+
+/* ── MISC ── */
+.hidden { display:none!important; }
+.mt10 { margin-top:10px; }
+.tracking-display { font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600; color:var(--green); padding:14px 16px; }
+input[type="file"] { display:none; }
 </style>
 </head>
 <body>
 
-<!-- LOADING -->
+<!-- ─ LOADING ─ -->
 <div id="ov-load" class="ov">
-  <div class="ov-icon load">📦</div>
+  <div class="ov-ring"><span>📦</span></div>
   <div class="ov-title blue" id="load-txt">กำลังเชื่อมต่อระบบ...</div>
 </div>
 
-<!-- BLOCKED -->
+<!-- ─ BLOCKED ─ -->
 <div id="ov-block" class="ov hidden">
-  <div class="ov-icon block">🚫</div>
+  <div class="ov-ring err"><span>🚫</span></div>
   <div class="ov-title red">ไม่มีสิทธิ์เข้าใช้งาน</div>
-  <div class="info-card"><div class="lbl">ผู้ใช้</div><div class="val" id="block-name">—</div></div>
-  <div class="alert red" id="block-reason">—</div>
-  <div class="alert muted">กรุณาพิมพ์รหัสลับใน LINE Chat<br>เพื่อเข้าสู่ระบบเจ้าหน้าที่ก่อน</div>
-  <button class="btn btn-secondary" style="max-width:200px" onclick="liff.closeWindow()">✕ ปิด</button>
+  <div class="ov-card"><div class="lbl">ผู้ใช้</div><div class="val" id="block-name">—</div></div>
+  <div class="ov-sub red" id="block-reason" style="color:var(--red)">—</div>
+  <div class="ov-sub">กรุณาพิมพ์รหัสลับใน LINE Chat เพื่อเข้าสู่ระบบเจ้าหน้าที่ก่อน</div>
+  <button class="btn btn-ghost" style="max-width:200px" onclick="liff.closeWindow()">✕ ปิด</button>
 </div>
 
-<!-- SUCCESS -->
+<!-- ─ SUCCESS ─ -->
 <div id="ov-ok" class="ov hidden">
-  <div class="ov-icon ok">✅</div>
+  <div class="ov-ring ok"><span>✅</span></div>
   <div class="ov-title green">บันทึกสำเร็จ!</div>
-  <div class="success-id" id="ok-tracking">—</div>
-  <div class="alert green">ส่งข้อมูลไปยัง LINE Bot แล้ว<br>กรุณายืนยันในหน้าแชท</div>
-  <button class="btn btn-secondary" style="max-width:240px" onclick="resetAll()">📦 บันทึกพัสดุชิ้นต่อไป</button>
-  <button class="btn btn-primary"   style="max-width:240px" onclick="liff.closeWindow()">✔️ ปิดและกลับสู่แชท</button>
+  <div class="id-badge" id="ok-tracking">—</div>
+  <img id="ok-photo" class="ov-photo hidden" src="" alt="">
+  <div class="tg-row" style="max-width:300px;width:100%">
+    <div class="tg-dot"></div>
+    <span id="ok-tg-msg">ส่ง Telegram แล้ว ✈️</span>
+  </div>
+  <div class="ov-actions">
+    <button class="btn btn-ghost" onclick="resetAll()">📦 บันทึกพัสดุชิ้นต่อไป</button>
+    <button class="btn btn-primary" onclick="liff.closeWindow()">✔️ ปิดและกลับสู่แชท</button>
+  </div>
 </div>
 
-<!-- HEADER -->
+<!-- ─ HEADER ─ -->
 <div class="hdr">
-  <div class="hdr-icon">📦</div>
+  <div class="hdr-logo">📦</div>
   <div>
     <div class="hdr-title">บันทึกพัสดุเข้า</div>
-    <div class="hdr-sub">ระบบพัสดุ กองรักษาการ ป.5</div>
+    <div class="hdr-sub">กองรักษาการ ป.5 พัน.5</div>
   </div>
   <div class="badge" id="badge-name">...</div>
 </div>
 
 <div class="content">
-  <!-- STEPS -->
+
+  <!-- ─ STEPS ─ -->
   <div class="steps">
-    <div class="step active" id="step1"><span class="step-num">1</span>ถ่ายรูป</div>
-    <div class="step"        id="step2"><span class="step-num">2</span>ตรวจสอบ</div>
-    <div class="step"        id="step3"><span class="step-num">3</span>ยืนยัน</div>
+    <div class="step active" id="step1"><span class="step-num">1</span>สแกน</div>
+    <div class="step"        id="step2"><span class="step-num">2</span>ข้อมูล</div>
+    <div class="step"        id="step3"><span class="step-num">3</span>ถ่ายรูป</div>
+    <div class="step"        id="step4"><span class="step-num">4</span>ยืนยัน</div>
   </div>
 
   <!-- STATUS BAR -->
-  <div class="sbar info hidden" id="sbar">
-    <span id="sbar-icon">ℹ️</span>
-    <span id="sbar-txt"></span>
-  </div>
+  <div class="sbar hidden" id="sbar"><span id="sbar-icon"></span><span id="sbar-txt"></span></div>
 
-  <!-- ====== STEP 1: ถ่ายรูป OCR ====== -->
+  <!-- ═══════════════════════════════ STEP 1 ═══════════════════════════════ -->
   <div id="sec-scan">
     <div class="card">
-      <div class="card-hdr">📸 ถ่ายรูปป้ายพัสดุ</div>
+      <div class="card-hdr">🔍 สแกนบาร์โค้ด / QR Code</div>
       <div class="card-body">
 
-        <!-- TABS: QR Live / ถ่ายรูป OCR -->
-        <div class="scan-tabs">
-          <button class="scan-tab active" id="tab-qr"  onclick="switchTab('qr')">📱 สแกน QR / บาร์โค้ด</button>
-          <button class="scan-tab"        id="tab-ocr" onclick="switchTab('ocr')">📸 ถ่ายรูป + AI อ่าน</button>
+        <div class="tabs">
+          <button class="tab active" id="tab-live" onclick="switchTab('live')">📱 Live Scan</button>
+          <button class="tab"        id="tab-ocr"  onclick="switchTab('ocr')">📷 ถ่ายรูป AI</button>
         </div>
 
-        <!-- === TAB 1: QR LIVE === -->
-        <div id="panel-qr">
-          <!-- กล้อง live ด้วย Html5Qrcode -->
+        <!-- Live Scan -->
+        <div id="panel-live">
           <div class="qr-wrap" id="qr-wrap">
             <div id="qr-reader"></div>
             <div class="qr-overlay">
-              <div class="qr-frame"><div class="qr-fi"></div><div class="qr-scan-line"></div></div>
+              <div class="qr-frame">
+                <div class="qr-corner tl"></div><div class="qr-corner tr"></div>
+                <div class="qr-corner bl"></div><div class="qr-corner br"></div>
+                <div class="qr-line"></div>
+              </div>
             </div>
-            <div class="qr-status" id="qr-status">กำลังค้นหา QR / บาร์โค้ด...</div>
-            <button class="qr-stop-btn" onclick="stopLive()">✕ หยุด</button>
+            <div class="qr-hint" id="qr-hint">กำลังค้นหาบาร์โค้ด...</div>
+            <button class="qr-stop" onclick="stopLive()">✕ หยุด</button>
           </div>
-
-          <!-- ปุ่มเปิดกล้อง -->
-          <div class="ocr-zone" id="qr-start-zone" onclick="startLive()">
-            <div class="ocr-zone-icon">📱</div>
-            <div class="ocr-zone-title">กดสแกน QR Code / บาร์โค้ด</div>
-            <div class="ocr-zone-sub">ใช้กล้อง live สแกนได้ทันที<br>รองรับ QR, CODE128, EAN, Data Matrix</div>
+          <div class="zone" id="live-zone" onclick="startLive()">
+            <div class="zone-icon">📱</div>
+            <div class="zone-title">กดเปิดกล้อง Live Scan</div>
+            <div class="zone-sub">รองรับ QR Code, Barcode, CODE128<br>สแกนได้ทันที ไม่ต้องถ่ายรูป</div>
           </div>
-
-          <div class="spin-wrap" id="qr-spin">
-            <div class="spinner"></div>
-            <div class="spin-text" id="qr-spin-txt">กำลังเปิดกล้อง...</div>
-          </div>
+          <div class="spin-row" id="live-spin"><div class="spinner"></div><div class="spin-txt">กำลังเปิดกล้อง...</div></div>
         </div>
 
-        <!-- === TAB 2: OCR ถ่ายรูป === -->
+        <!-- OCR ถ่ายรูป -->
         <div id="panel-ocr" class="hidden">
-          <!-- Preview รูป -->
-          <div class="preview-wrap" id="preview-wrap">
-            <img id="preview-img" src="" alt="">
-            <div class="preview-badge" id="preview-badge">รูปที่ถ่าย</div>
+          <div class="preview-wrap" id="ocr-preview-wrap">
+            <img id="ocr-preview-img" src="" alt="">
+            <div class="preview-lbl" id="ocr-preview-lbl">รูปที่ถ่าย</div>
           </div>
-
-          <div class="ocr-zone" id="ocr-zone" onclick="triggerCamera()">
-            <div class="ocr-zone-icon">📷</div>
-            <div class="ocr-zone-title">กดถ่ายรูปพัสดุ</div>
-            <div class="ocr-zone-sub">ถ่ายให้เห็น<strong>บาร์โค้ด + ชื่อผู้รับ + เบอร์โทร</strong><br>ในรูปเดียว — AI จะอ่านให้อัตโนมัติ</div>
+          <div class="zone" id="ocr-zone" onclick="triggerOCR()">
+            <div class="zone-icon">📷</div>
+            <div class="zone-title">กดถ่ายรูปป้ายพัสดุ</div>
+            <div class="zone-sub">ถ่ายให้เห็น <strong>บาร์โค้ด + ชื่อ + เบอร์</strong><br>AI จะอ่านข้อมูลให้อัตโนมัติ</div>
           </div>
-
-          <div class="spin-wrap" id="spin-wrap">
-            <div class="spinner"></div>
-            <div class="spin-text">AI กำลังอ่านข้อมูลจากรูป...</div>
-          </div>
+          <div class="spin-row" id="ocr-spin"><div class="spinner"></div><div class="spin-txt">AI กำลังอ่านข้อมูล...</div></div>
         </div>
 
-        <!-- ผลลัพธ์ (แสดงทั้ง 2 tab) -->
+        <!-- OCR Result (ทั้ง 2 tabs) -->
         <div class="ocr-result" id="ocr-result">
-          <div class="ocr-result-title">✅ อ่านได้แล้ว</div>
-          <div class="ocr-row"><div class="ocr-row-lbl">เลขพัสดุ</div><div class="ocr-row-val" id="ocr-tracking">—</div></div>
-          <div class="ocr-row"><div class="ocr-row-lbl">ชื่อผู้รับ</div><div class="ocr-row-val" id="ocr-name">—</div></div>
-          <div class="ocr-row"><div class="ocr-row-lbl">เบอร์โทร</div><div class="ocr-row-val" id="ocr-phone">—</div></div>
-          <div class="ocr-retry" id="ocr-retry-btn">📷 ถ่ายใหม่ / สแกนใหม่</div>
+          <div class="ocr-result-hdr">✅ อ่านบาร์โค้ดได้แล้ว</div>
+          <div class="ocr-row"><div class="ocr-lbl">เลขพัสดุ</div><div class="ocr-val" id="r-tracking">—</div></div>
+          <div class="ocr-row"><div class="ocr-lbl">ชื่อผู้รับ</div><div class="ocr-val" id="r-name">—</div></div>
+          <div class="ocr-row"><div class="ocr-lbl">เบอร์โทร</div><div class="ocr-val" id="r-phone">—</div></div>
+          <div class="ocr-retry" onclick="retryStep1()">↩ สแกนใหม่ / ถ่ายใหม่</div>
         </div>
 
-        <!-- input file ซ่อน -->
-        <input type="file" id="qr-file" accept="image/*" class="hidden">
-        <input type="file" id="photo-file" accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="file-ocr" accept="image/*" capture="environment">
       </div>
     </div>
 
-    <!-- ปุ่มพิมพ์เองสำรอง -->
-    <button class="btn btn-secondary" id="btn-manual" onclick="showManual()">⌨️ พิมพ์เลขพัสดุเองแทน</button>
-
-    <div id="manual-box" class="card hidden" style="margin-top:12px">
-      <div class="card-hdr">⌨️ พิมพ์เลขพัสดุ</div>
+    <!-- Manual input -->
+    <button class="btn btn-ghost mt10" id="btn-manual-show" onclick="showManual()">⌨️ พิมพ์เลขพัสดุเอง</button>
+    <div id="manual-card" class="card hidden" style="margin-top:10px">
+      <div class="card-hdr">⌨️ ป้อนเลขพัสดุ</div>
       <div class="card-body">
         <div class="field">
-          <label>เลขพัสดุ <span>*</span></label>
-          <input type="text" id="manual-val" class="mono" placeholder="เช่น TH123456789TH"
+          <div class="field-label">เลขพัสดุ <span>*</span></div>
+          <input type="text" id="manual-input" class="mono" placeholder="เช่น TH123456789TH"
                  autocomplete="off" autocapitalize="characters"
-                 oninput="onManualInput()"
-                 onkeydown="if(event.key==='Enter') confirmManual()">
+                 oninput="onManualInput()" onkeydown="if(event.key==='Enter')confirmManual()">
         </div>
-        <button class="btn btn-primary" onclick="confirmManual()">ยืนยันเลขพัสดุ ➜</button>
-        <button class="btn btn-secondary" onclick="hideManual()">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="confirmManual()">ยืนยัน ➜</button>
+        <button class="btn btn-ghost"   onclick="hideManual()">ยกเลิก</button>
       </div>
     </div>
-
-    <button class="btn btn-primary mt8 hidden" id="btn-next1" onclick="goStep2()">ถัดไป: ตรวจสอบข้อมูล ➜</button>
+    <button class="btn btn-primary mt10 hidden" id="btn-to-step2" onclick="goStep2()">ถัดไป: กรอกข้อมูล ➜</button>
   </div>
 
-  <!-- ====== STEP 2: ตรวจสอบ / แก้ไข ====== -->
+  <!-- ═══════════════════════════════ STEP 2 ═══════════════════════════════ -->
   <div id="sec-form" class="hidden">
     <div class="card">
-      <div class="card-hdr">📦 เลขพัสดุ</div>
-      <div style="padding:14px 16px">
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--green)" id="form-tracking-preview">—</div>
-      </div>
+      <div class="card-hdr">📬 เลขพัสดุ</div>
+      <div class="tracking-display" id="form-tracking">—</div>
     </div>
-
     <div class="card">
-      <div class="card-hdr">📝 ข้อมูลผู้รับ <span style="font-size:11px;color:var(--green);font-weight:400;margin-left:6px">✨ AI กรอกให้แล้ว — ตรวจสอบด้านล่าง</span></div>
+      <div class="card-hdr">👤 ข้อมูลผู้รับ<span class="sub">✨ AI กรอกให้แล้ว — ตรวจสอบด้านล่าง</span></div>
       <div class="card-body">
         <div class="field">
-          <label>ชื่อ-ยศ ผู้รับ <span>*</span></label>
-          <input type="text" id="f-name" placeholder="เช่น จ.ส.อ. สมชาย ใจดี" oninput="checkForm()">
+          <div class="field-label">ชื่อ-ยศ ผู้รับ <span>*</span></div>
+          <input type="text" id="f-name" placeholder="เช่น จ.ส.อ.สมชาย ใจดี" oninput="checkForm()">
         </div>
         <div class="field">
-          <label>เบอร์โทรศัพท์ <span>*</span></label>
+          <div class="field-label">เบอร์โทรศัพท์ <span>*</span></div>
           <div class="field-row">
             <div class="field">
               <input type="tel" id="f-phone" placeholder="0801234567" maxlength="10" oninput="checkForm()">
             </div>
-            <button class="btn btn-secondary" style="width:auto;padding:11px 14px;white-space:nowrap;font-size:13px;flex-shrink:0" onclick="setNoPhone()">ไม่มีเบอร์</button>
+            <button class="btn btn-ghost" style="width:auto;padding:12px 14px;font-size:13px;flex-shrink:0;border-radius:10px" onclick="setNoPhone()">ไม่มีเบอร์</button>
           </div>
-          <div class="phone-hint" id="phone-hint"></div>
+          <div class="ph-hint" id="ph-hint"></div>
         </div>
         <div class="field">
-          <label>ลักษณะพัสดุ <span>*</span></label>
+          <div class="field-label">ลักษณะพัสดุ <span>*</span></div>
           <select id="f-type" onchange="checkForm()">
-            <option value="">-- เลือกลักษณะพัสดุ --</option>
+            <option value="">-- เลือกลักษณะ --</option>
             <option value="กล่อง">📦 กล่อง</option>
             <option value="ซอง">📨 ซอง</option>
             <option value="ถุง">🛍️ ถุง</option>
@@ -345,90 +471,148 @@
             <option value="อื่นๆ">📦 อื่นๆ</option>
           </select>
         </div>
-
-        <!-- ปุ่มถ่ายใหม่ (ในกรณีข้อมูลไม่ถูก) -->
-        <button class="btn btn-secondary" style="font-size:13px;padding:10px" onclick="retakePhoto()">📷 ถ่ายรูปใหม่อีกครั้ง</button>
+        <button class="btn btn-ghost" style="font-size:13px;padding:11px" onclick="goStep1()">📷 ถ่ายป้ายพัสดุใหม่</button>
       </div>
     </div>
-
     <div class="btn-row">
-      <button class="btn btn-secondary btn-back" onclick="goStep1()">← กลับ</button>
-      <button class="btn btn-primary" id="btn-next2" onclick="goStep3()" disabled>ถัดไป: ยืนยัน ➜</button>
+      <button class="btn btn-ghost btn-back" onclick="goStep1()">← กลับ</button>
+      <button class="btn btn-primary" id="btn-to-step3" onclick="goStep3()" disabled>ถัดไป: ถ่ายรูปพัสดุ ➜</button>
     </div>
   </div>
 
-  <!-- ====== STEP 3: ยืนยัน ====== -->
+  <!-- ═══════════════════════════════ STEP 3 ═══════════════════════════════ -->
+  <div id="sec-photo" class="hidden">
+    <div class="card">
+      <div class="card-hdr">📷 ถ่ายรูปพัสดุ<span class="sub">ส่ง Telegram โดยตรง</span></div>
+      <div class="card-body">
+
+        <!-- Info ย่อ -->
+        <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.9">
+          <div>📬 <span id="ph-tracking" style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--green)">—</span></div>
+          <div>👤 <span id="ph-name">—</span></div>
+        </div>
+
+        <!-- Preview -->
+        <div class="photo-preview-wrap" id="pkg-preview-wrap">
+          <img id="pkg-preview-img" src="" alt="">
+        </div>
+
+        <!-- กล่องถ่ายรูป -->
+        <div class="photo-zone" id="pkg-zone" onclick="triggerPkgPhoto()">
+          <div style="font-size:50px">📸</div>
+          <div style="font-size:15px;font-weight:700">กดถ่ายรูปพัสดุ</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7">
+            ถ่ายรูปให้เห็นหน้าพัสดุชัดเจน<br>
+            <span style="color:var(--blue);font-weight:600">รูปแนบ Telegram พร้อมข้อมูล</span>
+          </div>
+        </div>
+
+        <div class="spin-row" id="pkg-spin">
+          <div class="spinner"></div>
+          <div class="spin-txt" id="pkg-spin-txt">กำลังประมวลผลรูป...</div>
+        </div>
+
+        <div id="photo-status" class="hidden">
+          <div class="tag-ok" id="photo-status-tag">✅ ถ่ายรูปแล้ว — พร้อมส่ง Telegram</div>
+        </div>
+
+        <!-- Telegram info -->
+        <div class="tg-row">
+          <div class="tg-dot"></div>
+          <span>รูปพัสดุจะแนบใน Telegram พร้อมข้อมูล check-in</span>
+        </div>
+
+        <button class="btn btn-ghost" id="btn-skip-photo" onclick="skipPhoto()" style="font-size:13px;padding:11px">
+          ⏭ ข้ามการถ่ายรูป (ไม่บังคับ)
+        </button>
+
+        <input type="file" id="file-pkg" accept="image/*" capture="environment">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-back" onclick="goStep2()">← กลับ</button>
+      <button class="btn btn-primary" id="btn-to-step4" onclick="goStep4()" disabled>ถัดไป: ยืนยัน ➜</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ STEP 4 ═══════════════════════════════ -->
   <div id="sec-confirm" class="hidden">
-    <div class="confirm-panel">
+    <div class="confirm-card">
       <div class="confirm-hdr">✅ ตรวจสอบข้อมูลก่อนบันทึก</div>
       <div class="confirm-row"><div class="confirm-key">เลขพัสดุ</div><div class="confirm-val mono" id="c-tracking">—</div></div>
       <div class="confirm-row"><div class="confirm-key">ชื่อผู้รับ</div><div class="confirm-val" id="c-name">—</div></div>
       <div class="confirm-row"><div class="confirm-key">เบอร์โทร</div><div class="confirm-val mono" id="c-phone">—</div></div>
       <div class="confirm-row"><div class="confirm-key">ลักษณะ</div><div class="confirm-val" id="c-type">—</div></div>
       <div class="confirm-row"><div class="confirm-key">บันทึกโดย</div><div class="confirm-val" id="c-admin">—</div></div>
+      <div class="confirm-row" style="flex-direction:column">
+        <div class="confirm-key">รูปพัสดุ</div>
+        <img id="c-photo" class="confirm-photo hidden" src="" alt="">
+        <div id="c-no-photo" class="tag-ok tag-skip" style="margin-top:6px">ไม่ได้ถ่ายรูป</div>
+      </div>
+    </div>
+    <div class="tg-row" style="margin-bottom:14px">
+      <div class="tg-dot"></div>
+      <span id="tg-confirm-txt">ส่ง Telegram พร้อมรูปพัสดุ</span>
     </div>
     <div class="btn-row">
-      <button class="btn btn-secondary btn-back" onclick="goStep2()">← แก้ไข</button>
+      <button class="btn btn-ghost btn-back" onclick="goStep3()">← แก้ไข</button>
       <button class="btn btn-primary" id="btn-submit" onclick="submitPackage()">📦 บันทึกพัสดุ</button>
     </div>
   </div>
 
-</div><!-- end .content -->
+</div><!-- /content -->
 
 <script>
-// ============================================================
-// CONFIG
-// ============================================================
+/* ═══════════════════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════════════════ */
 const LIFF_ID = '2009243376-Hd3IygRL';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec';
 
-// ============================================================
-// STATE
-// ============================================================
+/* ═══════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════ */
 const S = {
   tracking:'', name:'', phone:'', type:'',
-  adminName:'', adminUserId:'', adminType:'',
-  qrScanner: null, qrRunning: false,
-  activeTab:'qr'
+  userId:'', userName:'', adminType:'',
+  activeTab: 'live',
+  qr: null, qrRunning: false,
+  // Photo
+  photoB64:    null,
+  photoMime:   'image/jpeg',
+  photoSkipped: false
 };
 const $ = id => document.getElementById(id);
 
-// ============================================================
-// INIT
-// ============================================================
+/* ═══════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════ */
 async function init() {
   try {
     await liff.init({ liffId: LIFF_ID });
     if (!liff.isLoggedIn()) { liff.login(); return; }
     const p = await liff.getProfile();
-    S.adminName   = p.displayName;
-    S.adminUserId = p.userId;
+    S.userId = p.userId; S.userName = p.displayName;
     setLoad('กำลังตรวจสอบสิทธิ์...');
-    
     const auth = await checkAuth(p.userId);
     if (!auth.isAdmin) {
       $('block-name').textContent   = p.displayName;
-      $('block-reason').textContent = auth.reason || 'ยังไม่ได้เข้าระบบเจ้าหน้าที่';
+      $('block-reason').textContent = auth.reason || 'ยังไม่ได้เข้าระบบ';
       show('ov-block'); return;
     }
     S.adminType = auth.adminType || 'STAFF';
     $('badge-name').textContent = p.displayName;
     if (S.adminType === 'MAIN_ADMIN') $('badge-name').classList.add('main');
-    $('c-admin').textContent = p.displayName +
-      (S.adminType === 'MAIN_ADMIN' ? ' (แอดมินหลัก)' : ' (เจ้าหน้าที่)');
+    $('c-admin').textContent = p.displayName + (S.adminType === 'MAIN_ADMIN' ? ' (แอดมินหลัก)' : ' (เจ้าหน้าที่)');
     show('main');
 
-    // ผูก file inputs
-    $('qr-file').addEventListener('change',  onQRPhoto);
-    $('photo-file').addEventListener('change', onOCRPhoto);
-    $('ocr-retry-btn').addEventListener('click', onRetry);
+    $('file-ocr').addEventListener('change', onOCRFile);
+    $('file-pkg').addEventListener('change', onPkgPhotoFile);
 
-    // เริ่มต้น Html5Qrcode Scanner (เพียงกำหนดออบเจ็กต์เตรียมไว้)
-    S.qrScanner = new Html5Qrcode("qr-reader");
-
+    S.qr = new Html5Qrcode("qr-reader");
   } catch(e) {
     setLoad('❌ ' + e.message);
-    setTimeout(() => show('main'), 1500);
+    setTimeout(() => show('main'), 1800);
   }
 }
 
@@ -438,430 +622,444 @@ async function checkAuth(userId) {
     return r.ok ? await r.json() : { isAdmin:false, reason:'HTTP '+r.status };
   } catch(e) { return { isAdmin:false, reason:e.message }; }
 }
+
 function show(s) {
   ['ov-load','ov-block','ov-ok'].forEach(x => $(x).classList.add('hidden'));
   if (s !== 'main') $(s).classList.remove('hidden');
 }
 function setLoad(t) { $('load-txt').textContent = t; }
 
-// ============================================================
-// TABS
-// ============================================================
+/* ═══════════════════════════════════════════════════════════
+   TABS
+═══════════════════════════════════════════════════════════ */
 function switchTab(tab) {
   S.activeTab = tab;
   stopLive();
-  $('tab-qr').classList.toggle('active',  tab === 'qr');
-  $('tab-ocr').classList.toggle('active', tab === 'ocr');
-  $('panel-qr').classList.toggle('hidden',  tab !== 'qr');
-  $('panel-ocr').classList.toggle('hidden', tab !== 'ocr');
+  $('tab-live').classList.toggle('active', tab === 'live');
+  $('tab-ocr').classList.toggle('active',  tab === 'ocr');
+  $('panel-live').classList.toggle('hidden', tab !== 'live');
+  $('panel-ocr').classList.toggle('hidden',  tab !== 'ocr');
 }
 
-function onRetry() {
+function retryStep1() {
   $('ocr-result').classList.remove('show');
-  $('btn-next1').classList.add('hidden');
+  $('btn-to-step2').classList.add('hidden');
   clearSbar();
-  if (S.activeTab === 'qr') {
-    $('qr-start-zone').style.display = '';
-    $('qr-wrap').classList.remove('show');
-  }
+  if (S.activeTab === 'live') { resetLiveZone(); }
+  else { resetOCRZone(); }
 }
 
-// ============================================================
-// COMMON SUCCESS HANDLER
-// ============================================================
-function handleScanSuccess(tracking) {
+/* ═══════════════════════════════════════════════════════════
+   SCAN SUCCESS (shared)
+═══════════════════════════════════════════════════════════ */
+function onScanSuccess(tracking) {
   S.tracking = tracking;
-  S.name = ''; S.phone = ''; S.type = '';
-  $('ocr-tracking').textContent = tracking;
-  $('ocr-name').textContent     = '(กรอกในขั้นตอนถัดไป)';
-  $('ocr-phone').textContent    = '(กรอกในขั้นตอนถัดไป)';
+  $('r-tracking').textContent = tracking;
+  $('r-name').textContent  = '(กรอกในขั้นตอนถัดไป)';
+  $('r-phone').textContent = '(กรอกในขั้นตอนถัดไป)';
   $('ocr-result').classList.add('show');
-  setQRZone('done');
-  $('btn-next1').classList.remove('hidden');
+  $('btn-to-step2').classList.remove('hidden');
   setSbar('success', '✅ เลขพัสดุ: ' + tracking);
 }
 
-// ============================================================
-// TAB QR: ถ่ายรูป → decode tracking
-// ============================================================
-function triggerQRPhoto() {
-  $('qr-file').value = '';
-  $('qr-file').click();
-}
-
-async function onQRPhoto(e) {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-
-  setQRZone('scanning');
-  $('ocr-result').classList.remove('show');
-  $('qr-spin').classList.add('show');
-  $('qr-spin-txt').textContent = 'กำลังอ่านบาร์โค้ด...';
-  $('btn-next1').classList.add('hidden');
-  clearSbar();
-
-  try {
-    // 1. ลองอ่านผ่าน Html5Qrcode แบบ Local ก่อน
-    try {
-      const decodedText = await S.qrScanner.scanFile(file, true);
-      const tracking = parseTracking(decodedText);
-      if (tracking) {
-        handleScanSuccess(tracking);
-        return; // อ่านได้ ไม่ต้องส่ง AI
-      }
-    } catch (localError) {
-      console.log('Local QR scan fail, falling back to AI.', localError);
-    }
-
-    // 2. ถ้าไม่ได้ ให้ส่งให้ AI ช่วยอ่าน (Fallback)
-    $('qr-spin-txt').textContent = 'AI กำลังอ่านบาร์โค้ด...';
-    const b64 = await resizeToBase64(file, 1200);
-    const result = await callGAS('ocr_barcode', { imageBase64:b64, mimeType:'image/jpeg' });
-    const tracking = result.tracking || null;
-
-    if (tracking) {
-      handleScanSuccess(tracking);
-    } else {
-      setQRZone('idle');
-      setSbar('warning', '⚠️ อ่านบาร์โค้ดไม่ได้ — ลองถ่ายใหม่ให้บาร์โค้ดอยู่กลางภาพ แสงสว่างเพียงพอ');
-    }
-  } catch(err) {
-    setQRZone('idle');
-    setSbar('error', '❌ ' + err.message);
-  } finally {
-    $('qr-spin').classList.remove('show');
-    $('qr-file').value = '';
-  }
-}
-
-function parseTracking(raw) {
-  let t = (raw || '').trim();
-  if (t.startsWith('http')) {
-    try { t = new URL(t).pathname.split('/').filter(Boolean).pop() || t; } catch(e) {}
-  }
-  if (t.startsWith('{')) {
-    try { const o = JSON.parse(t); t = o.tracking || o.trackingNumber || o.id || t; } catch(e) {}
-  }
-  return t.length >= 4 ? t : null;
-}
-
-function setQRZone(state) {
-  const zone = $('qr-start-zone');
-  if (state === 'scanning') {
-    zone.style.display = '';
-    zone.className = 'ocr-zone scanning';
-  } else if (state === 'done') {
-    zone.style.display = 'none'; // ซ่อนปุ่มกล้องเมื่อสแกนได้แล้ว
-  } else {
-    zone.style.display = '';
-    zone.className = 'ocr-zone';
-    zone.innerHTML = '<div class="ocr-zone-icon">📱</div>'
-      + '<div class="ocr-zone-title">กดสแกน QR Code / บาร์โค้ด</div>'
-      + '<div class="ocr-zone-sub">ใช้กล้อง live สแกนได้ทันที<br>รองรับ QR, CODE128, EAN, Data Matrix</div>';
-  }
-}
-
-// ============================================================
-// LIVE SCAN (ด้วย html5-qrcode API) รองรับทั้ง iOS / Android
-// ============================================================
+/* ═══════════════════════════════════════════════════════════
+   LIVE SCAN (html5-qrcode)
+═══════════════════════════════════════════════════════════ */
 async function startLive() {
-  if (!S.qrScanner) S.qrScanner = new Html5Qrcode("qr-reader");
-
-  $('qr-start-zone').style.display = 'none';
-  $('qr-spin').classList.add('show');
-  $('qr-spin-txt').textContent = 'กำลังเปิดกล้อง...';
-
+  if (!S.qr) S.qr = new Html5Qrcode("qr-reader");
+  $('live-zone').style.display = 'none';
+  $('live-spin').classList.add('show');
   try {
-    // กำหนด config ให้แสกนแม่นยำขึ้น
-    const config = {
-      fps: 10,
-      aspectRatio: 1.0, 
-      disableFlip: false 
-    };
-
-    await S.qrScanner.start(
-      { facingMode: "environment" },
-      config,
-      (decodedText, decodedResult) => {
-        // ทำงานเมื่ออ่านสำเร็จ
-        const tracking = parseTracking(decodedText);
-        if (tracking) {
-          stopLive();
-          handleScanSuccess(tracking);
-        }
-      },
-      (errorMessage) => {
-        // กรณีอ่านระหว่างเฟรมไม่ได้ (ปล่อยผ่าน)
-      }
+    await S.qr.start(
+      { facingMode:'environment' },
+      { fps:10, aspectRatio:1.0, disableFlip:false },
+      decoded => { const t=parseBarcode(decoded); if(t){ stopLive(); onScanSuccess(t); } },
+      () => {}
     );
-
     $('qr-wrap').classList.add('show');
-    $('qr-spin').classList.remove('show');
-    $('qr-status').textContent = 'กำลังค้นหาบาร์โค้ด / QR Code...';
+    $('live-spin').classList.remove('show');
+    $('qr-hint').textContent = 'กำลังค้นหาบาร์โค้ด...';
     S.qrRunning = true;
-
   } catch(err) {
-    $('qr-spin').classList.remove('show');
-    $('qr-start-zone').style.display = '';
-    setSbar('warning', '⚠️ เปิดกล้องไม่ได้ — ใช้ปุ่ม "ถ่ายรูป + AI อ่าน" แทน');
-    console.error("Camera start error", err);
+    $('live-spin').classList.remove('show');
+    $('live-zone').style.display = '';
+    setSbar('warning', '⚠️ เปิดกล้องไม่ได้ — ลองแท็บ "ถ่ายรูป AI" แทน');
   }
 }
 
 function stopLive() {
   S.qrRunning = false;
-  if (S.qrScanner && S.qrScanner.isScanning) {
-    S.qrScanner.stop().catch(err => console.log("Stop camera error:", err));
-  }
+  if (S.qr && S.qr.isScanning) S.qr.stop().catch(()=>{});
   $('qr-wrap').classList.remove('show');
-  $('qr-spin').classList.remove('show');
+  $('live-spin').classList.remove('show');
 }
 
-// ============================================================
-// TAB OCR: ถ่ายรูป → AI อ่านทุกอย่าง
-// ============================================================
-function triggerCamera() {
-  $('photo-file').value = '';
-  $('photo-file').click();
+function resetLiveZone() {
+  $('live-zone').style.display = '';
+  $('qr-wrap').classList.remove('show');
 }
 
-async function onOCRPhoto(e) {
+function parseBarcode(raw) {
+  let t = (raw||'').trim();
+  if (t.startsWith('http')) { try { t = new URL(t).pathname.split('/').filter(Boolean).pop()||t; } catch(e){} }
+  if (t.startsWith('{'))    { try { const o=JSON.parse(t); t=o.tracking||o.trackingNumber||o.id||t; } catch(e){} }
+  return t.length >= 4 ? t : null;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   OCR TAB
+═══════════════════════════════════════════════════════════ */
+function triggerOCR() { $('file-ocr').value=''; $('file-ocr').click(); }
+
+async function onOCRFile(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
   if (S.activeTab !== 'ocr') switchTab('ocr');
 
   const url = URL.createObjectURL(file);
-  $('preview-img').src = url;
-  $('preview-wrap').classList.add('show');
-  $('preview-badge').textContent = '📸 กำลังประมวลผล...';
+  $('ocr-preview-img').src = url;
+  $('ocr-preview-wrap').classList.add('show');
+  $('ocr-preview-lbl').textContent = '⏳ กำลังอ่าน...';
   $('ocr-zone').classList.add('scanning');
   $('ocr-result').classList.remove('show');
-  $('spin-wrap').classList.add('show');
-  $('btn-next1').classList.add('hidden');
+  $('ocr-spin').classList.add('show');
+  $('btn-to-step2').classList.add('hidden');
   clearSbar();
 
   try {
-    const b64 = await resizeToBase64(file, 1200);
-
-    // ลองอ่าน Barcode Locally ก่อน (ช่วยลดภาระ AI / แม่นยำขึ้น)
+    const b64 = await resize(file, 1200);
     let qrTracking = null;
-    try {
-      const decodedText = await S.qrScanner.scanFile(file, true);
-      qrTracking = parseTracking(decodedText);
-    } catch(e) { }
+    try { qrTracking = parseBarcode(await S.qr.scanFile(file, true)); } catch(e) {}
 
-    // ส่งเข้า GAS OCR อ่านชื่อ + เบอร์
-    const result = await callGAS('ocr_label', { imageBase64:b64, mimeType:'image/jpeg' });
-    if (qrTracking) result.tracking = qrTracking;
+    const resp = await postGAS('ocr_label', { imageBase64:b64, mimeType:'image/jpeg' });
+    if (qrTracking) resp.tracking = qrTracking;
 
-    $('ocr-tracking').textContent = result.tracking || '—';
-    $('ocr-name').textContent     = result.name     || '—';
-    $('ocr-phone').textContent    = result.phone    || '—';
+    $('r-tracking').textContent = resp.tracking || '—';
+    $('r-name').textContent     = resp.name     || '—';
+    $('r-phone').textContent    = resp.phone    || '—';
     $('ocr-result').classList.add('show');
-    $('ocr-zone').className = 'ocr-zone done';
-    $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">✅</div>'
-      + '<div class="ocr-zone-title" style="color:var(--green)">อ่านสำเร็จ!</div>'
-      + '<div class="ocr-zone-sub">กดถัดไปเพื่อตรวจสอบ<br>หรือ <u onclick="triggerCamera()" style="color:var(--blue);cursor:pointer">ถ่ายใหม่</u></div>';
-    $('preview-badge').textContent = '✅ อ่านสำเร็จ';
+    $('ocr-zone').className = 'zone done';
+    $('ocr-zone').innerHTML = '<div class="zone-icon">✅</div><div class="zone-title" style="color:var(--green)">อ่านสำเร็จ!</div><div class="zone-sub"><u onclick="triggerOCR()" style="color:var(--blue);cursor:pointer">ถ่ายใหม่</u></div>';
+    $('ocr-preview-lbl').textContent = '✅ อ่านสำเร็จ';
 
-    S.tracking = (result.tracking || '').trim();
-    S.name     = (result.name     || '').trim();
-    S.phone    = (result.phone    || '').replace(/\D/g,'').slice(0,10);
-    S.type     = result.type || '';
+    S.tracking = (resp.tracking||'').trim();
+    S.name     = (resp.name    ||'').trim();
+    S.phone    = (resp.phone   ||'').replace(/\D/g,'').slice(0,10);
+    S.type     = resp.type || '';
 
     if (S.tracking && S.tracking !== 'ไม่พบ') {
-      $('btn-next1').classList.remove('hidden');
+      $('btn-to-step2').classList.remove('hidden');
       setSbar('success', '✅ อ่านเลขพัสดุ: ' + S.tracking);
     } else {
-      setSbar('warning', '⚠️ อ่านเลขพัสดุไม่ได้ — ถ่ายใหม่ให้เห็นบาร์โค้ด/QR ชัดขึ้น หรือพิมพ์เองด้านล่าง');
+      setSbar('warning', '⚠️ อ่านเลขพัสดุไม่ได้ — ลองถ่ายใหม่ให้ชัดขึ้น หรือพิมพ์เองด้านล่าง');
     }
   } catch(err) {
-    $('ocr-zone').className = 'ocr-zone';
-    $('ocr-zone').innerHTML = '<div class="ocr-zone-icon">📷</div>'
-      + '<div class="ocr-zone-title">กดถ่ายรูปอีกครั้ง</div>'
-      + '<div class="ocr-zone-sub">เกิดข้อผิดพลาด — ลองใหม่</div>';
+    resetOCRZone();
     setSbar('error', '❌ ' + err.message);
-    $('preview-badge').textContent = '❌ ผิดพลาด';
   } finally {
-    $('spin-wrap').classList.remove('show');
+    $('ocr-spin').classList.remove('show');
     URL.revokeObjectURL(url);
+    $('file-ocr').value = '';
   }
 }
 
-// ============================================================
-// GAS CALL
-// ============================================================
-async function callGAS(action, extra) {
+function resetOCRZone() {
+  $('ocr-zone').className = 'zone';
+  $('ocr-zone').innerHTML = '<div class="zone-icon">📷</div><div class="zone-title">กดถ่ายรูปป้ายพัสดุ</div><div class="zone-sub">ถ่ายให้เห็น <strong>บาร์โค้ด + ชื่อ + เบอร์</strong><br>AI จะอ่านข้อมูลให้อัตโนมัติ</div>';
+  $('ocr-preview-wrap').classList.remove('show');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GAS HELPERS
+═══════════════════════════════════════════════════════════ */
+async function postGAS(action, extra) {
   const form = new FormData();
   form.append('payload', JSON.stringify({ action, ...extra }));
   const resp = await fetch(GAS_URL, { method:'POST', body:form });
-  if (!resp.ok) throw new Error('GAS HTTP ' + resp.status);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const data = await resp.json();
   if (data.status !== 'ok') throw new Error(data.message || action + ' ล้มเหลว');
   return data.result;
 }
 
-async function resizeToBase64(file, maxW) {
+async function resize(file, maxW) {
   return new Promise((res, rej) => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
-      let w = img.width, h = img.height;
-      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      let w=img.width, h=img.height;
+      if (w > maxW) { h = Math.round(h*maxW/w); w = maxW; }
+      const c = document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
       URL.revokeObjectURL(url);
-      res(c.toDataURL('image/jpeg', 0.88).split(',')[1]);
+      res(c.toDataURL('image/jpeg',0.86).split(',')[1]);
     };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('โหลดรูปไม่ได้')); };
     img.src = url;
   });
 }
 
-// ============================================================
-// MANUAL
-// ============================================================
-function showManual() {
-  $('manual-box').classList.remove('hidden');
-  $('btn-manual').classList.add('hidden');
-  setTimeout(() => $('manual-val').focus(), 100);
-}
-function hideManual() {
-  $('manual-box').classList.add('hidden');
-  $('btn-manual').classList.remove('hidden');
-  $('manual-val').value = '';
-}
+/* ═══════════════════════════════════════════════════════════
+   MANUAL ENTRY
+═══════════════════════════════════════════════════════════ */
+function showManual() { $('manual-card').classList.remove('hidden'); $('btn-manual-show').classList.add('hidden'); setTimeout(()=>$('manual-input').focus(),100); }
+function hideManual() { $('manual-card').classList.add('hidden');    $('btn-manual-show').classList.remove('hidden'); $('manual-input').value=''; }
 function onManualInput() {
-  const v = $('manual-val').value.trim();
-  $('btn-next1').classList.toggle('hidden', v.length < 4);
+  const v = $('manual-input').value.trim();
+  $('btn-to-step2').classList.toggle('hidden', v.length < 4);
   if (v.length >= 4) S.tracking = v.toUpperCase();
 }
 function confirmManual() {
-  const v = $('manual-val').value.trim().toUpperCase();
-  if (v.length < 4) { setSbar('error','❌ กรุณาใส่อย่างน้อย 4 ตัว'); return; }
+  const v = $('manual-input').value.trim().toUpperCase();
+  if (v.length < 4) { setSbar('error','❌ ต้องมีอย่างน้อย 4 ตัวอักษร'); return; }
   S.tracking = v; hideManual();
-  $('btn-next1').classList.remove('hidden');
+  $('btn-to-step2').classList.remove('hidden');
   setSbar('success', '✅ เลขพัสดุ: ' + v);
 }
-function retakePhoto() {
-  goStep1();
-  setTimeout(() => { if (S.activeTab === 'qr') triggerQRPhoto(); else triggerCamera(); }, 200);
-}
 
-// ============================================================
-// NAVIGATION
-// ============================================================
-function setStep(n) {
-  [1,2,3].forEach(i => {
-    const el = $('step'+i); el.classList.remove('active','done');
-    if (i < n) el.classList.add('done'); else if (i === n) el.classList.add('active');
-  });
-}
-function goStep1() {
-  stopLive();
-  $('sec-form').classList.add('hidden');
-  $('sec-confirm').classList.add('hidden');
-  $('sec-scan').classList.remove('hidden');
-  setStep(1); clearSbar();
-}
-function goStep2() {
-  if (!S.tracking || S.tracking === 'ไม่พบ') { setSbar('error','❌ ยังไม่มีเลขพัสดุ'); return; }
-  stopLive();
-  $('form-tracking-preview').textContent = S.tracking;
-  const skip = ['ไม่พบ','(กรอกในขั้นตอนถัดไป)',''];
-  if (S.name && !skip.includes(S.name)) {
-    $('f-name').value = S.name; $('f-name').classList.add('ai-filled');
-  } else { $('f-name').value = ''; $('f-name').classList.remove('ai-filled'); }
-  if (S.phone && S.phone.length >= 9) {
-    $('f-phone').value = S.phone; $('f-phone').classList.add('ai-filled');
-  } else { $('f-phone').value = ''; $('f-phone').classList.remove('ai-filled'); }
-  $('f-type').value = {'กล่อง':'กล่อง','ซอง':'ซอง','ถุง':'ถุง','ม้วน':'ม้วน'}[S.type] || '';
-  $('sec-scan').classList.add('hidden');
-  $('sec-confirm').classList.add('hidden');
-  $('sec-form').classList.remove('hidden');
-  setStep(2); clearSbar(); checkForm();
-}
-function goStep3() {
-  const name=$('f-name').value.trim(), phone=$('f-phone').value.trim(), type=$('f-type').value;
-  if (!name||!phone||!type) { setSbar('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
-  $('c-tracking').textContent=S.tracking; $('c-name').textContent=name;
-  $('c-phone').textContent=phone; $('c-type').textContent=type;
-  $('sec-form').classList.add('hidden');
-  $('sec-confirm').classList.remove('hidden');
-  setStep(3); clearSbar();
-}
+/* ═══════════════════════════════════════════════════════════
+   STEP 3: ถ่ายรูปพัสดุ (check-in only)
+═══════════════════════════════════════════════════════════ */
+function triggerPkgPhoto() { $('file-pkg').value=''; $('file-pkg').click(); }
 
-// ============================================================
-// FORM
-// ============================================================
-function checkForm() {
-  const name=$('f-name').value.trim(), phone=$('f-phone').value.trim(), type=$('f-type').value;
-  const ok = name.length>=2 && (/^0[689]\d{8}$/.test(phone.replace(/\D/g,''))||phone==='ไม่มีเบอร์') && type!=='';
-  $('btn-next2').disabled = !ok;
-  const hint = $('phone-hint');
-  if (phone && phone!=='ไม่มีเบอร์') {
-    const c = phone.replace(/\D/g,'');
-    if (/^0[689]\d{8}$/.test(c))  { hint.style.color='var(--green)';  hint.textContent='✓ รูปแบบถูกต้อง'; }
-    else if (c.length>=4)          { hint.style.color='var(--yellow)'; hint.textContent='⚠️ ควรขึ้นต้น 06/08/09 10 หลัก'; }
-    else                            { hint.textContent=''; }
-  } else { hint.textContent=''; }
-}
-function setNoPhone() { $('f-phone').value='ไม่มีเบอร์'; $('f-phone').classList.remove('ai-filled'); checkForm(); }
+async function onPkgPhotoFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  $('pkg-spin').classList.add('show');
+  $('pkg-spin-txt').textContent = 'กำลังประมวลผลรูป...';
+  $('photo-status').classList.add('hidden');
+  $('btn-to-step4').disabled = true;
 
-// ============================================================
-// SUBMIT
-// ============================================================
-async function submitPackage() {
-  const btn=$('btn-submit');
-  btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...';
-  const tracking=S.tracking, name=$('f-name').value.trim(), phone=$('f-phone').value.trim(), type=$('f-type').value;
   try {
-    await liff.sendMessages([{ type:'text', text:`${tracking}\n${name}\n${phone}\n${type}` }]);
-    $('ok-tracking').textContent=tracking; show('ov-ok');
-  } catch(e) {
-    try {
-      await callGAS('liff_submit',{ userId:S.adminUserId, tracking, name, phone, type });
-      $('ok-tracking').textContent=tracking; show('ov-ok');
-    } catch(e2) {
-      setSbar('error','❌ บันทึกไม่สำเร็จ: '+e2.message);
-      btn.disabled=false; btn.textContent='📦 บันทึกพัสดุ';
-    }
+    const b64 = await resize(file, 1400);
+    S.photoB64  = b64;
+    S.photoMime = 'image/jpeg';
+    S.photoSkipped = false;
+
+    $('pkg-preview-img').src = 'data:image/jpeg;base64,' + b64;
+    $('pkg-preview-wrap').classList.add('show');
+
+    // Update zone
+    const zone = $('pkg-zone');
+    zone.classList.add('done');
+    zone.innerHTML =
+      '<div style="font-size:38px">✅</div>' +
+      '<div style="font-size:14px;font-weight:700;color:var(--green)">ถ่ายรูปแล้ว</div>' +
+      '<div style="font-size:12px;color:var(--muted)"><u onclick="triggerPkgPhoto()" style="color:var(--blue);cursor:pointer">กดเปลี่ยนรูป</u></div>';
+
+    $('photo-status').classList.remove('hidden');
+    $('photo-status-tag').className = 'tag-ok';
+    $('photo-status-tag').textContent = '✅ ถ่ายรูปแล้ว — จะส่งแนบใน Telegram';
+    $('btn-to-step4').disabled = false;
+    $('btn-skip-photo').textContent = '🔄 เปลี่ยนรูป';
+
+  } catch(err) {
+    setSbar('error', '❌ ประมวลผลรูปไม่สำเร็จ: ' + err.message);
+  } finally {
+    $('pkg-spin').classList.remove('show');
+    $('file-pkg').value = '';
   }
 }
 
-// ============================================================
-// RESET
-// ============================================================
-function resetAll() {
-  S.tracking=''; S.name=''; S.phone=''; S.type='';
+function skipPhoto() {
+  S.photoB64 = null;
+  S.photoSkipped = true;
+  const zone = $('pkg-zone');
+  zone.classList.remove('done');
+  zone.innerHTML =
+    '<div style="font-size:38px">⏭️</div>' +
+    '<div style="font-size:14px;font-weight:700;color:var(--muted)">ข้ามการถ่ายรูป</div>' +
+    '<div style="font-size:12px;color:var(--muted)"><u onclick="triggerPkgPhoto()" style="color:var(--blue);cursor:pointer">ถ่ายรูปทีหลัง</u></div>';
+  $('pkg-preview-wrap').classList.remove('show');
+  $('photo-status').classList.remove('hidden');
+  $('photo-status-tag').className = 'tag-ok tag-skip';
+  $('photo-status-tag').textContent = '⏭ ข้ามถ่ายรูป — Telegram จะส่งแค่ข้อมูล';
+  $('btn-to-step4').disabled = false;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════════════════ */
+function setStep(n) {
+  [1,2,3,4].forEach(i => {
+    const el = $('step'+i);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  });
+}
+
+function goStep1() {
   stopLive();
-  $('f-name').value=''; $('f-phone').value=''; $('f-type').value='';
-  $('f-name').classList.remove('ai-filled'); $('f-phone').classList.remove('ai-filled');
-  $('preview-wrap').classList.remove('show');
+  ['sec-form','sec-photo','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
+  $('sec-scan').classList.remove('hidden');
+  setStep(1); clearSbar();
+}
+
+function goStep2() {
+  if (!S.tracking) { setSbar('error','❌ ยังไม่มีเลขพัสดุ'); return; }
+  stopLive();
+  $('form-tracking').textContent = S.tracking;
+  const skip = ['ไม่พบ','(กรอกในขั้นตอนถัดไป)',''];
+  if (S.name && !skip.includes(S.name)) { $('f-name').value=S.name; $('f-name').classList.add('ai'); }
+  else { $('f-name').value=''; $('f-name').classList.remove('ai'); }
+  if (S.phone && S.phone.length >= 9) { $('f-phone').value=S.phone; $('f-phone').classList.add('ai'); }
+  else { $('f-phone').value=''; $('f-phone').classList.remove('ai'); }
+  $('f-type').value = ({กล่อง:'กล่อง',ซอง:'ซอง',ถุง:'ถุง',ม้วน:'ม้วน'}[S.type])||'';
+  ['sec-scan','sec-photo','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
+  $('sec-form').classList.remove('hidden');
+  setStep(2); clearSbar(); checkForm();
+}
+
+function goStep3() {
+  const name=$('f-name').value.trim(), phone=$('f-phone').value.trim(), type=$('f-type').value;
+  if (!name||!phone||!type) { setSbar('error','❌ กรุณากรอกข้อมูลให้ครบ'); return; }
+  S.name=name; S.phone=phone; S.type=type;
+  $('ph-tracking').textContent = S.tracking;
+  $('ph-name').textContent     = name;
+  if (!S.photoB64 && !S.photoSkipped) $('btn-to-step4').disabled = true;
+  else $('btn-to-step4').disabled = false;
+  ['sec-scan','sec-form','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
+  $('sec-photo').classList.remove('hidden');
+  setStep(3); clearSbar();
+}
+
+function goStep4() {
+  $('c-tracking').textContent = S.tracking;
+  $('c-name').textContent     = S.name;
+  $('c-phone').textContent    = S.phone;
+  $('c-type').textContent     = S.type;
+  if (S.photoB64) {
+    $('c-photo').src = 'data:image/jpeg;base64,' + S.photoB64;
+    $('c-photo').classList.remove('hidden');
+    $('c-no-photo').classList.add('hidden');
+    $('tg-confirm-txt').textContent = '✅ จะส่ง Telegram พร้อมรูปพัสดุ 📷';
+  } else {
+    $('c-photo').classList.add('hidden');
+    $('c-no-photo').classList.remove('hidden');
+    $('tg-confirm-txt').textContent = '📢 จะส่ง Telegram แบบข้อความ (ไม่มีรูป)';
+  }
+  ['sec-scan','sec-form','sec-photo'].forEach(id => $(id).classList.add('hidden'));
+  $('sec-confirm').classList.remove('hidden');
+  setStep(4); clearSbar();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORM VALIDATION
+═══════════════════════════════════════════════════════════ */
+function checkForm() {
+  const name=$('f-name').value.trim(), phone=$('f-phone').value.trim(), type=$('f-type').value;
+  const cleanPhone = phone.replace(/\D/g,'');
+  const phoneOk = /^0[689]\d{8}$/.test(cleanPhone) || phone==='ไม่มีเบอร์';
+  $('btn-to-step3').disabled = !(name.length>=2 && phoneOk && type!=='');
+  const hint=$('ph-hint');
+  if (phone && phone!=='ไม่มีเบอร์') {
+    if (/^0[689]\d{8}$/.test(cleanPhone)) { hint.style.color='var(--green)'; hint.textContent='✓ รูปแบบถูกต้อง'; }
+    else if (cleanPhone.length>=4)         { hint.style.color='var(--yellow)'; hint.textContent='⚠ ควรขึ้นต้น 06/08/09 ครบ 10 หลัก'; }
+    else hint.textContent='';
+  } else hint.textContent='';
+}
+function setNoPhone() { $('f-phone').value='ไม่มีเบอร์'; $('f-phone').classList.remove('ai'); checkForm(); }
+
+/* ═══════════════════════════════════════════════════════════
+   SUBMIT
+═══════════════════════════════════════════════════════════ */
+async function submitPackage() {
+  const btn = $('btn-submit');
+  btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...';
+
+  const { tracking, name, phone, type, photoB64, photoMime, userId } = S;
+
+  // สร้าง payload — รวม photo base64 ส่งไป GAS โดยตรง (GAS → Telegram)
+  const payload = { action:'liff_submit', userId, tracking, name, phone, type };
+  if (photoB64) { payload.photoBase64=photoB64; payload.photoMimeType=photoMime; }
+
+  try {
+    // ลอง sendMessages ผ่าน LIFF ก่อน (ไม่แนบรูป — รูปส่งผ่าน GAS)
+    let sentViaLiff = false;
+    try {
+      await liff.sendMessages([{ type:'text', text:`${tracking}\n${name}\n${phone}\n${type}` }]);
+      sentViaLiff = true;
+    } catch(e) {}
+
+    if (sentViaLiff) {
+      // ถ้า sendMessages สำเร็จ ให้ส่ง GAS แยกเพื่อทริก Telegram + บันทึก Sheet
+      btn.textContent='⏳ กำลังส่ง Telegram...';
+      const form = new FormData();
+      form.append('payload', JSON.stringify(payload));
+      const r = await fetch(GAS_URL, { method:'POST', body:form });
+      const d = await r.json();
+      if (d.status !== 'success') throw new Error(d.message || 'GAS error');
+      showSuccess(tracking, photoB64);
+    } else {
+      // sendMessages ล้มเหลว → ส่ง GAS โดยตรง
+      btn.textContent='⏳ กำลังบันทึก...';
+      const form = new FormData();
+      form.append('payload', JSON.stringify(payload));
+      const r = await fetch(GAS_URL, { method:'POST', body:form });
+      const d = await r.json();
+      if (d.status !== 'success') throw new Error(d.message || 'บันทึกไม่สำเร็จ');
+      showSuccess(tracking, photoB64);
+    }
+  } catch(err) {
+    setSbar('error', '❌ ' + err.message);
+    btn.disabled=false; btn.textContent='📦 บันทึกพัสดุ';
+  }
+}
+
+function showSuccess(tracking, photoB64) {
+  $('ok-tracking').textContent = tracking;
+  if (photoB64) {
+    $('ok-photo').src = 'data:image/jpeg;base64,' + photoB64;
+    $('ok-photo').classList.remove('hidden');
+    $('ok-tg-msg').textContent = '✅ ส่ง Telegram พร้อมรูปพัสดุแล้ว 📷';
+  } else {
+    $('ok-photo').classList.add('hidden');
+    $('ok-tg-msg').textContent = '✅ ส่ง Telegram แล้ว (ข้อความ)';
+  }
+  show('ov-ok');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════════════════════ */
+function resetAll() {
+  Object.assign(S, { tracking:'', name:'', phone:'', type:'', photoB64:null, photoMime:'image/jpeg', photoSkipped:false });
+  stopLive();
+  ['f-name','f-phone'].forEach(id => { $(id).value=''; $(id).classList.remove('ai'); });
+  $('f-type').value='';
   $('ocr-result').classList.remove('show');
-  $('spin-wrap').classList.remove('show');
-  $('qr-spin').classList.remove('show');
+  $('ocr-preview-wrap').classList.remove('show');
+  $('ocr-spin').classList.remove('show');
+  $('live-spin').classList.remove('show');
   $('qr-wrap').classList.remove('show');
-  $('btn-next1').classList.add('hidden');
-  $('manual-box').classList.add('hidden');
-  $('btn-manual').classList.remove('hidden');
-  
-  $('ocr-zone').className='ocr-zone';
-  $('ocr-zone').innerHTML='<div class="ocr-zone-icon">📷</div>'
-    +'<div class="ocr-zone-title">กดถ่ายรูปพัสดุ</div>'
-    +'<div class="ocr-zone-sub">ถ่ายให้เห็น<strong>บาร์โค้ด + ชื่อผู้รับ + เบอร์โทร</strong><br>ในรูปเดียว — AI จะอ่านให้อัตโนมัติ</div>';
-  
-  setQRZone('idle');
+  $('btn-to-step2').classList.add('hidden');
+  $('manual-card').classList.add('hidden');
+  $('btn-manual-show').classList.remove('hidden');
+  resetLiveZone(); resetOCRZone();
+  // Photo step reset
+  $('pkg-preview-wrap').classList.remove('show');
+  $('pkg-preview-img').src='';
+  $('photo-status').classList.add('hidden');
+  $('btn-to-step4').disabled = true;
+  $('btn-skip-photo').textContent = '⏭ ข้ามการถ่ายรูป (ไม่บังคับ)';
+  const zone=$('pkg-zone');
+  zone.classList.remove('done');
+  zone.innerHTML='<div style="font-size:50px">📸</div><div style="font-size:15px;font-weight:700">กดถ่ายรูปพัสดุ</div><div style="font-size:12px;color:var(--muted);line-height:1.7">ถ่ายรูปให้เห็นหน้าพัสดุชัดเจน<br><span style="color:var(--blue);font-weight:600">รูปแนบ Telegram พร้อมข้อมูล</span></div>';
+  $('ok-photo').classList.add('hidden'); $('ok-photo').src='';
   show('main'); goStep1();
 }
 
+/* ═══════════════════════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════════════════════ */
+const SBAR_ICON = { error:'❌', success:'✅', info:'ℹ️', warning:'⚠️' };
 function setSbar(type, text) {
-  if (!type) { clearSbar(); return; }
-  const b=$('sbar'); b.className='sbar '+type; b.classList.remove('hidden');
-  $('sbar-icon').textContent={error:'❌',success:'✅',info:'ℹ️',warning:'⚠️'}[type]||'ℹ️';
-  $('sbar-txt').textContent=text;
+  const b=$('sbar');
+  b.className='sbar '+type;
+  $('sbar-icon').textContent = SBAR_ICON[type]||'ℹ️';
+  $('sbar-txt').textContent  = text;
 }
-function clearSbar() { $('sbar').classList.add('hidden'); }
+function clearSbar() { $('sbar').className='sbar hidden'; }
 
 init();
 </script>
