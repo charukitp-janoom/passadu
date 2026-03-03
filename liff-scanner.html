@@ -624,19 +624,23 @@ async function onOCRPhoto(e) {
 async function callGAS(action, extra, timeoutMs=60000) {
   const ctrl=new AbortController(), tid=setTimeout(()=>ctrl.abort(),timeoutMs);
   try {
-    // ใช้ application/json แทน FormData เพื่อรับมือ GAS 302 redirect
-    // (FormData + redirect → browser เปลี่ยนเป็น GET → body หาย → "No post data")
+    // ใช้ Content-Type: text/plain เพื่อหลีกเลี่ยง CORS preflight ของ GAS
+    // application/json จะ trigger OPTIONS preflight แต่ GAS ไม่ตอบ → request ล้มเหลว
+    // text/plain = "simple request" → ไม่มี preflight → GAS รับได้ทันที
     const body = JSON.stringify({action,...extra});
     const resp  = await fetch(GAS_URL, {
       method:   'POST',
-      headers:  { 'Content-Type': 'application/json' },
+      headers:  { 'Content-Type': 'text/plain' },
       body:     body,
       redirect: 'follow',
       signal:   ctrl.signal,
     });
     clearTimeout(tid);
     if (!resp.ok) throw new Error('GAS HTTP ' + resp.status);
-    const data = await resp.json();
+    const text = await resp.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch(_) { throw new Error('GAS response ไม่ใช่ JSON: ' + text.substring(0,100)); }
     if (data.status === 'error') throw new Error(data.message || action + ' ล้มเหลว');
     return data.result !== undefined ? data.result : data;
   } catch(e) { clearTimeout(tid); if(e.name==='AbortError') throw new Error('หมดเวลาเชื่อมต่อ'); throw e; }
