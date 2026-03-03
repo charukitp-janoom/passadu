@@ -786,66 +786,62 @@ function checkForm(){
 function setNoPhone(){$('f-phone').value='ไม่มีเบอร์';$('f-phone').classList.remove('ai-filled');checkForm();}
 
 // ============================================================
-// SUBMIT — Step 1: liff_submit → get packageId
-//          Step 2: upload_package_photo → Telegram send
+// ============================================================
+// SUBMIT
+// v2.1: ใช้ liff_submit เส้นทางเดียว — ไม่ sendMessages (ป้องกันบันทึกซ้อน)
+//       Telegram จะถูกส่งครั้งเดียวใน upload_package_photo พร้อมรูป
 // ============================================================
 async function submitPackage() {
   if (S.submitting) return;
-  S.submitting=true;
-  const btn=$('btn-submit');
-  btn.disabled=true; btn.textContent='⏳ กำลังบันทึก...';
+  S.submitting = true;
+  const btn = $('btn-submit');
+  btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
   clearSbar2();
 
-  const tracking=S.tracking, name=$('f-name').value.trim(), phone=$('f-phone').value.trim(), type=$('f-type').value;
+  const tracking = S.tracking;
+  const name     = $('f-name').value.trim();
+  const phone    = $('f-phone').value.trim();
+  const type     = $('f-type').value;
 
   try {
-    // ── Step 1: บันทึกข้อมูลพัสดุ (sendMessages ก่อน, fallback liff_submit) ──
-    let packageId = '';
-    try {
-      await liff.sendMessages([{ type:'text', text:`${tracking}\n${name}\n${phone}\n${type}` }]);
-      // ถ้า sendMessages สำเร็จ packageId จะถูก generate ใน GAS ผ่าน handleTextMessage
-      // ต้องดึง packageId จาก liff_submit แทนเพื่อให้รู้ ID สำหรับอัปโหลดรูป
-      throw new Error('use_liff_submit'); // บังคับใช้ liff_submit เพื่อรับ packageId กลับมา
-    } catch(_) {
-      btn.textContent='⏳ กำลังบันทึกข้อมูล...';
-      const res = await callGAS('liff_submit', { userId:S.adminUserId, tracking, name, phone, type });
-      if (!res || !res.packageId) throw new Error('ไม่ได้รับ packageId จากระบบ');
-      packageId = res.packageId;
-    }
-
+    // ── Step 1: บันทึกข้อมูลพัสดุผ่าน liff_submit (ช่องทางเดียว) ──
+    btn.textContent = '⏳ กำลังบันทึกข้อมูล...';
+    const res = await callGAS('liff_submit', {
+      userId: S.adminUserId, tracking, name, phone, type
+    });
+    if (!res || !res.packageId) throw new Error('ไม่ได้รับ packageId จากระบบ');
+    const packageId = res.packageId;
     S.packageId = packageId;
 
-    // ── Step 2: อัปโหลดรูปพัสดุ + แจ้ง Telegram ──
+    // ── Step 2: อัปโหลดรูปพัสดุ + แจ้ง Telegram (ครั้งเดียวที่นี่) ──
     if (S.pkgPhotoBase64) {
-      btn.textContent='📤 กำลังส่งรูปภาพไปยัง Telegram...';
+      btn.textContent = '📤 กำลังส่งรูปภาพไปยัง Telegram...';
       try {
         await callGAS('upload_package_photo', {
           packageId,
-          userId:       S.adminUserId,
-          imageBase64:  S.pkgPhotoBase64,
-          imageMime:    S.pkgPhotoMime,
+          userId:         S.adminUserId,
+          imageBase64:    S.pkgPhotoBase64,
+          imageMime:      S.pkgPhotoMime,
           trackingNumber: tracking,
           recipientName:  name,
           packageType:    type,
           adminName:      S.adminName,
         }, 90000);
-      } catch(photoErr) {
+      } catch (photoErr) {
         console.warn('Photo upload warn:', photoErr.message);
         setSbar2('warning', '⚠️ บันทึกข้อมูลแล้ว แต่ส่งรูปไม่สำเร็จ: ' + photoErr.message);
       }
     }
 
     $('ok-tracking').textContent = tracking;
-    $('ok-msg').textContent = packageId
-      ? `รหัส: ${packageId}\nรูปพัสดุส่งไปยัง Telegram แล้ว ✅`
-      : 'บันทึกข้อมูลเรียบร้อยแล้ว ✅';
+    $('ok-msg').textContent = `รหัส: ${packageId}\nรูปพัสดุส่งไปยัง Telegram แล้ว ✅`;
     show('ov-ok');
 
-  } catch(e) {
+  } catch (e) {
     setSbar2('error', '❌ บันทึกไม่สำเร็จ: ' + e.message + '\nกรุณากดบันทึกอีกครั้ง');
-    btn.disabled=false; btn.textContent='📦 บันทึกพัสดุ';
+    btn.disabled = false; btn.textContent = '📦 บันทึกพัสดุ';
   } finally {
-    S.submitting=false;
+    S.submitting = false;
   }
 }
 
