@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>จ่ายพัสดุ</title>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+  :root {
+    --orange:#f97316; --orange-dark:#c2410c; --bg:#0d1117;
+    --surface:#161b22; --surface2:#21262d; --border:#30363d;
+    --text:#e6edf3; --muted:#7d8590; --red:#f85149;
+    --yellow:#d29922; --blue:#388bfd; --green:#00c853;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+  /* OVERLAYS */
+  .ov{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px;text-align:center;z-index:9999}
+  .ov.hidden{display:none}
+  .ov-icon{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px}
+  .ov-icon.load{background:rgba(56,139,253,.1);border:2px solid var(--blue);animation:pulse 1.5s ease-in-out infinite}
+  .ov-icon.block{background:rgba(248,81,73,.15);border:2px solid var(--red)}
+  .ov-icon.ok{background:rgba(249,115,22,.15);border:2px solid var(--orange)}
+  .ov-title{font-size:20px;font-weight:700}
+  .ov-title.red{color:var(--red)} .ov-title.orange{color:var(--orange)} .ov-title.blue{color:var(--blue)}
+  .info-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 24px;width:100%;max-width:320px;text-align:left}
+  .info-card .lbl{font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+  .info-card .val{font-size:15px;font-weight:600}
+  .alert{border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.7;width:100%;max-width:320px;white-space:pre-line;text-align:left}
+  .alert.red{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red)}
+  .alert.orange{background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);color:var(--orange)}
+  .alert.muted{background:var(--surface);border:1px solid var(--border);color:var(--muted);text-align:center}
+  .success-id{font-family:'IBM Plex Mono',monospace;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 24px;font-size:15px;font-weight:600;letter-spacing:1px;word-break:break-all;max-width:320px;width:100%;text-align:center}
+
+  /* HEADER */
+  .hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+  .hdr-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--orange),var(--orange-dark));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .hdr-title{font-size:16px;font-weight:700}
+  .hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .badge{margin-left:auto;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+  .badge.main{border-color:rgba(249,115,22,.5);color:var(--orange)}
+
+  /* CONTENT */
+  .content{padding:20px 16px 40px;max-width:500px;margin:0 auto}
+
+  /* STEPS */
+  .steps{display:flex;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .step{flex:1;padding:10px 2px;text-align:center;font-size:10px;color:var(--muted);transition:all .3s;border-right:1px solid var(--border)}
+  .step:last-child{border-right:none}
+  .step.active{background:rgba(249,115,22,.1);color:var(--orange);font-weight:600}
+  .step.done{color:var(--green)}
+  .step-num{display:block;font-size:15px;font-weight:700;margin-bottom:2px;font-family:'IBM Plex Mono',monospace}
+
+  /* BUTTONS */
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border:none;border-radius:10px;font-family:'Sarabun',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
+  .btn:active{transform:scale(.97)}
+  .btn-primary{background:var(--orange);color:#fff}
+  .btn-primary:hover{background:var(--orange-dark)}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .btn-row{display:flex;gap:8px}
+  .btn-row .btn-back{flex:0 0 auto;width:auto;padding:14px 20px}
+
+  /* CARD */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:16px;animation:fadeIn .4s ease}
+  .card-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+  .card-body{padding:16px;display:flex;flex-direction:column;gap:14px}
+
+  /* QR ZONE */
+  .qr-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px 20px;border:2px dashed var(--border);border-radius:14px;cursor:pointer;transition:all .2s;background:var(--surface2)}
+  .qr-zone:active{background:rgba(249,115,22,.08);border-color:var(--orange)}
+  .qr-zone-icon{font-size:52px;line-height:1}
+  .qr-zone-title{font-size:16px;font-weight:700;text-align:center}
+  .qr-zone-sub{font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+
+  /* QR LIVE */
+  .qr-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden;display:none}
+  .qr-wrap.show{display:block}
+  #qr-reader{width:100%;height:100%;object-fit:cover;display:block}
+  #qr-reader video{width:100%!important;height:100%!important;object-fit:cover!important}
+  #qr-reader__dashboard_section_csr{display:none!important}
+  .qr-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10}
+  .qr-frame{width:60%;aspect-ratio:1/1;position:relative}
+  .qr-frame::before,.qr-frame::after,.qr-fi::before,.qr-fi::after{content:'';position:absolute;width:24px;height:24px;border-color:var(--orange);border-style:solid}
+  .qr-frame::before{top:0;left:0;border-width:3px 0 0 3px}
+  .qr-frame::after{top:0;right:0;border-width:3px 3px 0 0}
+  .qr-fi::before{bottom:0;left:0;border-width:0 0 3px 3px}
+  .qr-fi::after{bottom:0;right:0;border-width:0 3px 3px 0}
+  .qr-scan-line{position:absolute;left:5%;right:5%;height:2px;background:linear-gradient(90deg,transparent,var(--orange),transparent);animation:qrScan 2s ease-in-out infinite;box-shadow:0 0 8px var(--orange)}
+  @keyframes qrScan{0%,100%{top:8%}50%{top:88%}}
+  .qr-status{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.5);padding:6px;backdrop-filter:blur(4px);z-index:10}
+  .qr-stop-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;backdrop-filter:blur(4px);font-family:'Sarabun',sans-serif;z-index:20}
+
+  /* SPINNER */
+  .spin-wrap{display:none;align-items:center;justify-content:center;gap:12px;padding:16px;background:rgba(249,115,22,.08);border-radius:12px;border:1px solid rgba(249,115,22,.2)}
+  .spin-wrap.show{display:flex}
+  .spinner{width:22px;height:22px;border:2.5px solid rgba(249,115,22,.3);border-top-color:var(--orange);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+  .spin-text{font-size:13px;color:var(--orange);font-weight:600}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* FORM */
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;font-family:'Sarabun',sans-serif;font-size:15px;color:var(--text);outline:none;transition:border-color .2s}
+  input:focus{border-color:var(--orange)}
+  input::placeholder{color:var(--muted)}
+  input.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
+
+  /* PACKAGE CARD */
+  .pkg-card{background:rgba(249,115,22,.06);border:1.5px solid rgba(249,115,22,.3);border-radius:14px;overflow:hidden}
+  .pkg-card-hdr{padding:12px 16px;background:rgba(249,115,22,.12);border-bottom:1px solid rgba(249,115,22,.2);font-weight:700;font-size:13px;color:var(--orange);display:flex;align-items:center;gap:8px}
+  .pkg-row{display:flex;padding:10px 16px;border-bottom:1px solid rgba(249,115,22,.1);gap:12px}
+  .pkg-row:last-child{border-bottom:none}
+  .pkg-key{font-size:11px;color:var(--muted);width:80px;flex-shrink:0;padding-top:2px}
+  .pkg-val{font-size:14px;font-weight:600;word-break:break-all}
+  .pkg-val.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
+  .pkg-photo{width:100%;border-radius:8px;margin-top:8px;max-height:180px;object-fit:cover}
+
+  /* STATUS BAR */
+  .sbar{margin-bottom:16px;border-radius:10px;padding:12px 14px;font-size:13px;display:flex;align-items:center;gap:8px;line-height:1.5}
+  .sbar.hidden{display:none}
+  .sbar.error{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red)}
+  .sbar.success{background:rgba(0,200,83,.1);border:1px solid rgba(0,200,83,.3);color:var(--green)}
+  .sbar.info{background:rgba(56,139,253,.1);border:1px solid rgba(56,139,253,.3);color:var(--blue)}
+  .sbar.warning{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);color:var(--yellow)}
+
+  /* SIG PAD */
+  .sig-wrap{border:2px dashed var(--border);border-radius:12px;overflow:hidden;background:var(--surface2);position:relative}
+  .sig-wrap canvas{display:block;width:100%;touch-action:none}
+  .sig-clear{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif}
+  .sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--muted);pointer-events:none;text-align:center;transition:opacity .3s}
+  .sig-hint.hidden{opacity:0}
+
+  /* CONFIRM TABLE */
+  .confirm-panel{background:var(--surface);border:1px solid rgba(249,115,22,.3);border-radius:16px;overflow:hidden;margin-bottom:16px}
+  .confirm-hdr{padding:14px 16px;background:rgba(249,115,22,.1);border-bottom:1px solid rgba(249,115,22,.2);font-weight:700;font-size:14px;color:var(--orange)}
+  .confirm-row{display:flex;padding:11px 16px;border-bottom:1px solid var(--border);gap:12px}
+  .confirm-row:last-child{border-bottom:none}
+  .confirm-key{font-size:12px;color:var(--muted);width:90px;flex-shrink:0;padding-top:2px}
+  .confirm-val{font-size:14px;font-weight:500;word-break:break-all}
+  .confirm-val.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
+
+  /* SEARCH INPUT */
+  .search-box{display:flex;gap:8px}
+  .search-box input{flex:1}
+  .search-box .btn{width:auto;padding:11px 16px;white-space:nowrap;font-size:13px}
+
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.7}}
+  .hidden{display:none!important}
+  .mt8{margin-top:8px}
+</style>
+</head>
+<body>
+
+<!-- OVERLAYS -->
+<div id="ov-load" class="ov">
+  <div class="ov-icon load">📬</div>
+  <div class="ov-title blue" id="load-txt">กำลังเชื่อมต่อระบบ...</div>
+</div>
+
+<div id="ov-block" class="ov hidden">
+  <div class="ov-icon block">🚫</div>
+  <div class="ov-title red">ไม่มีสิทธิ์เข้าใช้งาน</div>
+  <div class="info-card"><div class="lbl">ผู้ใช้</div><div class="val" id="block-name">—</div></div>
+  <div class="alert red" id="block-reason">—</div>
+  <div class="alert muted">กรุณาพิมพ์รหัสลับใน LINE Chat<br>เพื่อเข้าสู่ระบบเจ้าหน้าที่ก่อน</div>
+  <button class="btn btn-secondary" style="max-width:200px" onclick="liff.closeWindow()">✕ ปิด</button>
+</div>
+
+<div id="ov-ok" class="ov hidden">
+  <div class="ov-icon ok">✅</div>
+  <div class="ov-title orange">จ่ายพัสดุสำเร็จ!</div>
+  <div class="success-id" id="ok-packageid">—</div>
+  <div class="alert orange" id="ok-recipient">—</div>
+  <div class="alert orange" id="ok-tg-status" style="display:none">—</div>
+  <button class="btn btn-secondary" style="max-width:240px" onclick="resetAll()">📬 จ่ายพัสดุชิ้นต่อไป</button>
+  <button class="btn btn-primary"   style="max-width:240px" onclick="liff.closeWindow()">✔️ ปิดและกลับสู่แชท</button>
+</div>
+
+<!-- hidden inputs -->
+<input type="file" id="sig-input" accept="image/*" class="hidden">
+
+<div class="hdr">
+  <div class="hdr-icon">📬</div>
+  <div>
+    <div class="hdr-title">จ่ายพัสดุ</div>
+    <div class="hdr-sub">ระบบพัสดุ กองรักษาการ ป.5</div>
+  </div>
+  <div class="badge" id="badge-name">...</div>
+</div>
+
+<div class="content">
+  <div class="steps">
+    <div class="step active" id="step1"><span class="step-num">1</span>ค้นหา</div>
+    <div class="step"        id="step2"><span class="step-num">2</span>ตรวจสอบ</div>
+    <div class="step"        id="step3"><span class="step-num">3</span>ลายเซ็น</div>
+    <div class="step"        id="step4"><span class="step-num">4</span>ยืนยัน</div>
+  </div>
+
+  <div class="sbar hidden" id="sbar">
+    <span id="sbar-icon">ℹ️</span><span id="sbar-txt"></span>
+  </div>
+
+  <!-- ====== STEP 1: ค้นหาพัสดุ ====== -->
+  <div id="sec-search">
+    <div class="card">
+      <div class="card-hdr">🔍 ขั้นตอนที่ 1 — ค้นหาพัสดุ</div>
+      <div class="card-body">
+        <!-- Live QR -->
+        <div class="qr-wrap" id="qr-wrap">
+          <div id="qr-reader"></div>
+          <div class="qr-overlay"><div class="qr-frame"><div class="qr-fi"></div><div class="qr-scan-line"></div></div></div>
+          <div class="qr-status" id="qr-status">กำลังค้นหาบาร์โค้ด...</div>
+          <button class="qr-stop-btn" onclick="stopLive()">✕ หยุด</button>
+        </div>
+        <div class="qr-zone" id="qr-zone" onclick="startLive()">
+          <div class="qr-zone-icon">📷</div>
+          <div class="qr-zone-title">กดสแกน QR / บาร์โค้ด</div>
+          <div class="qr-zone-sub">สแกน QR Code หรือบาร์โค้ดบนพัสดุ<br>หรือพิมพ์รหัสด้านล่าง</div>
+        </div>
+        <div class="spin-wrap" id="qr-spin">
+          <div class="spinner"></div>
+          <div class="spin-text" id="qr-spin-txt">กำลังค้นหา...</div>
+        </div>
+
+        <!-- Manual search -->
+        <div style="font-size:12px;color:var(--muted);text-align:center;margin:4px 0">— หรือ —</div>
+        <div class="search-box">
+          <input type="text" id="search-input" class="mono" placeholder="รหัสพัสดุ หรือเลขพัสดุ..." autocomplete="off" autocapitalize="characters" onkeydown="if(event.key==='Enter')doSearch()">
+          <button class="btn btn-primary" onclick="doSearch()">ค้นหา</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">เช่น: <span style="font-family:'IBM Plex Mono',monospace">010668143022</span> หรือ <span style="font-family:'IBM Plex Mono',monospace">TH123456789</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== STEP 2: ตรวจสอบข้อมูล ====== -->
+  <div id="sec-verify" class="hidden">
+    <div class="card">
+      <div class="card-hdr">📦 ข้อมูลพัสดุ</div>
+      <div class="card-body">
+        <div class="pkg-card" id="pkg-info">
+          <div class="pkg-card-hdr">📦 <span id="pv-status-badge">รอรับ</span></div>
+          <div class="pkg-row"><div class="pkg-key">รหัส</div><div class="pkg-val mono" id="pv-id">—</div></div>
+          <div class="pkg-row"><div class="pkg-key">เลขพัสดุ</div><div class="pkg-val mono" id="pv-tracking">—</div></div>
+          <div class="pkg-row"><div class="pkg-key">ผู้รับ</div><div class="pkg-val" id="pv-name">—</div></div>
+          <div class="pkg-row"><div class="pkg-key">เบอร์โทร</div><div class="pkg-val mono" id="pv-phone">—</div></div>
+          <div class="pkg-row"><div class="pkg-key">ลักษณะ</div><div class="pkg-val" id="pv-type">—</div></div>
+          <div class="pkg-row"><div class="pkg-key">รับเข้า</div><div class="pkg-val" id="pv-checkin">—</div></div>
+          <div id="pv-photo-row" class="pkg-row hidden">
+            <div class="pkg-key">รูปพัสดุ</div>
+            <div class="pkg-val"><img id="pv-photo" src="" class="pkg-photo" alt="รูปพัสดุ"></div>
+          </div>
+        </div>
+
+        <!-- Telegram Chat ID แจ้งเตือน -->
+        <div id="tg-notify-wrap" style="background:rgba(56,139,253,.06);border:1px solid rgba(56,139,253,.2);border-radius:10px;padding:12px 14px;">
+          <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:6px">📨 แจ้งเตือน Telegram ผู้รับ</div>
+          <div id="tg-linked" class="hidden" style="font-size:13px;color:var(--green)">✅ ผูก Telegram แล้ว — จะแจ้งเตือนอัตโนมัติ</div>
+          <div id="tg-manual-wrap">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px">ผู้รับยังไม่ได้ผูก Telegram — ใส่ Chat ID (ถ้ามี)</div>
+            <input type="text" id="tg-chatid-input" class="mono" placeholder="Telegram Chat ID (ไม่บังคับ)" autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary btn-back" onclick="goStep1()">← กลับ</button>
+      <button class="btn btn-primary" onclick="goStep3()">ถัดไป: ลายเซ็น ➜</button>
+    </div>
+  </div>
+
+  <!-- ====== STEP 3: ลายเซ็นรับพัสดุ ====== -->
+  <div id="sec-sign" class="hidden">
+    <div class="card">
+      <div class="card-hdr">✍️ ขั้นตอนที่ 3 — ลายเซ็นรับพัสดุ</div>
+      <div class="card-body">
+        <div style="font-size:13px;color:var(--muted)">ให้ผู้รับลงลายเซ็นในกล่องด้านล่างนี้</div>
+        <div class="sig-wrap">
+          <canvas id="sig-canvas" height="180"></canvas>
+          <span class="sig-hint" id="sig-hint">✍️ ลงลายเซ็นที่นี่</span>
+          <button class="sig-clear" onclick="clearSig()">ล้าง</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);text-align:center">ใช้นิ้วหรือ stylus ลากลายเซ็น</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary btn-back" onclick="goStep2()">← กลับ</button>
+      <button class="btn btn-primary" id="btn-next3" onclick="goStep4()" disabled>ถัดไป: ยืนยัน ➜</button>
+    </div>
+  </div>
+
+  <!-- ====== STEP 4: ยืนยัน ====== -->
+  <div id="sec-confirm" class="hidden">
+    <div class="confirm-panel">
+      <div class="confirm-hdr">✅ ยืนยันการจ่ายพัสดุ</div>
+      <div class="confirm-row"><div class="confirm-key">รหัส</div><div class="confirm-val mono" id="c-id">—</div></div>
+      <div class="confirm-row"><div class="confirm-key">เลขพัสดุ</div><div class="confirm-val mono" id="c-tracking">—</div></div>
+      <div class="confirm-row"><div class="confirm-key">ผู้รับ</div><div class="confirm-val" id="c-name">—</div></div>
+      <div class="confirm-row"><div class="confirm-key">เบอร์โทร</div><div class="confirm-val mono" id="c-phone">—</div></div>
+      <div class="confirm-row"><div class="confirm-key">ลายเซ็น</div>
+        <div class="confirm-val"><img id="c-sig" src="" style="max-width:100%;border-radius:6px;background:var(--surface2);max-height:80px" alt="ลายเซ็น"></div>
+      </div>
+      <div class="confirm-row"><div class="confirm-key">จ่ายโดย</div><div class="confirm-val" id="c-admin">—</div></div>
+    </div>
+    <div class="sbar hidden" id="sbar2"><span id="sbar2-icon">ℹ️</span><span id="sbar2-txt"></span></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary btn-back" onclick="goStep3()">← กลับ</button>
+      <button class="btn btn-primary" id="btn-submit" onclick="submitPickup()">📬 ยืนยันจ่ายพัสดุ</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// CONFIG — อัปเดต LIFF_ID ของหน้าจ่ายพัสดุด้วย
+// ============================================================
+const LIFF_ID  = '2009243376-PICKUP00';  // << เปลี่ยนเป็น LIFF ID ของหน้าจ่ายพัสดุ
+const GAS_URL  = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec';
+
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  adminName:'', adminUserId:'', adminType:'',
+  pkg: null,          // ข้อมูลพัสดุที่ค้นพบ
+  sigDataUrl: null,   // ลายเซ็น base64
+  tgChatId: '',       // Telegram Chat ID ของผู้รับ
+  qrScanner: null, qrRunning: false,
+  submitting: false,
+};
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    const p = await liff.getProfile();
+    S.adminName   = p.displayName;
+    S.adminUserId = p.userId;
+    setLoad('กำลังตรวจสอบสิทธิ์...');
+    const auth = await checkAuth(p.userId);
+    if (!auth.isAdmin) {
+      $('block-name').textContent   = p.displayName;
+      $('block-reason').textContent = auth.reason || 'ยังไม่ได้เข้าระบบเจ้าหน้าที่';
+      show('ov-block'); return;
+    }
+    S.adminType = auth.adminType || 'STAFF';
+    $('badge-name').textContent = p.displayName;
+    if (S.adminType === 'MAIN_ADMIN') $('badge-name').classList.add('main');
+    $('c-admin').textContent = p.displayName;
+    show('main');
+    S.qrScanner = new Html5Qrcode("qr-reader");
+    initSigPad();
+  } catch(e) {
+    setLoad('❌ ' + e.message);
+    setTimeout(() => show('main'), 1500);
+  }
+}
+
+async function checkAuth(userId) {
+  try {
+    const r = await fetch(`${GAS_URL}?action=check_admin&userId=${encodeURIComponent(userId)}`);
+    return r.ok ? await r.json() : { isAdmin:false, reason:'HTTP '+r.status };
+  } catch(e) { return { isAdmin:false, reason:e.message }; }
+}
+
+function show(s) {
+  ['ov-load','ov-block','ov-ok'].forEach(x => $(x).classList.add('hidden'));
+  if (s !== 'main') $(s).classList.remove('hidden');
+}
+function setLoad(t) { $('load-txt').textContent = t; }
+
+// ============================================================
+// QR SCANNER
+// ============================================================
+async function startLive() {
+  if (!S.qrScanner) S.qrScanner = new Html5Qrcode("qr-reader");
+  $('qr-zone').style.display='none'; $('qr-spin').classList.add('show');
+  $('qr-spin-txt').textContent='กำลังเปิดกล้อง...';
+  try {
+    await S.qrScanner.start(
+      { facingMode:"environment" },
+      { fps:10, aspectRatio:1.0 },
+      (decoded) => { const t=parseId(decoded); if(t){stopLive();performSearch(t);} },
+      () => {}
+    );
+    $('qr-wrap').classList.add('show'); $('qr-spin').classList.remove('show');
+    S.qrRunning = true;
+  } catch(err) {
+    $('qr-spin').classList.remove('show'); $('qr-zone').style.display='';
+    setSbar('warning','⚠️ เปิดกล้องไม่ได้ — กรุณาพิมพ์รหัสแทน');
+  }
+}
+
+function stopLive() {
+  S.qrRunning = false;
+  if (S.qrScanner && S.qrScanner.isScanning) S.qrScanner.stop().catch(()=>{});
+  $('qr-wrap').classList.remove('show'); $('qr-spin').classList.remove('show');
+  $('qr-zone').style.display='';
+}
+
+function parseId(raw) {
+  let t = (raw||'').trim();
+  if (t.startsWith('http')) { try{t=new URL(t).searchParams.get('id')||new URL(t).pathname.split('/').pop()||t;}catch(_){} }
+  return t.length >= 4 ? t : null;
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+function doSearch() {
+  const v = $('search-input').value.trim();
+  if (!v || v.length < 4) { setSbar('error','❌ กรุณาใส่รหัสพัสดุหรือเลขพัสดุ'); return; }
+  performSearch(v);
+}
+
+async function performSearch(identifier) {
+  stopLive();
+  $('qr-spin').classList.add('show');
+  $('qr-spin-txt').textContent = 'กำลังค้นหา...';
+  clearSbar();
+  try {
+    const result = await callGAS('lookup_package', { identifier, userId: S.adminUserId });
+    if (!result || !result.packageId) {
+      setSbar('error', '❌ ไม่พบพัสดุรหัส "' + identifier + '"');
+      return;
+    }
+    S.pkg = result;
+    fillPkgCard(result);
+    // ตรวจ TG link
+    if (result.tgChatId) {
+      S.tgChatId = result.tgChatId;
+      $('tg-linked').classList.remove('hidden');
+      $('tg-manual-wrap').style.display = 'none';
+    } else {
+      S.tgChatId = '';
+      $('tg-linked').classList.add('hidden');
+      $('tg-manual-wrap').style.display = '';
+    }
+    goStep2();
+  } catch(err) {
+    setSbar('error', '❌ ' + err.message);
+  } finally {
+    $('qr-spin').classList.remove('show');
+  }
+}
+
+function fillPkgCard(pkg) {
+  $('pv-id').textContent       = pkg.packageId || '—';
+  $('pv-tracking').textContent = pkg.trackingNumber || '—';
+  $('pv-name').textContent     = pkg.recipientName || '—';
+  $('pv-phone').textContent    = pkg.phone || '—';
+  $('pv-type').textContent     = pkg.packageType || '—';
+  $('pv-checkin').textContent  = pkg.checkIn || '—';
+  $('pv-status-badge').textContent = pkg.status || 'รอรับ';
+  if (pkg.photoUrl) {
+    $('pv-photo').src = pkg.photoUrl;
+    $('pv-photo-row').classList.remove('hidden');
+  } else {
+    $('pv-photo-row').classList.add('hidden');
+  }
+}
+
+// ============================================================
+// SIGNATURE PAD
+// ============================================================
+let sigCanvas, sigCtx, sigDrawing = false, sigHasMark = false;
+
+function initSigPad() {
+  sigCanvas = $('sig-canvas');
+  sigCtx    = sigCanvas.getContext('2d');
+  // ปรับขนาด canvas ให้ตรงกับ CSS
+  function resize() {
+    const rect = sigCanvas.getBoundingClientRect();
+    sigCanvas.width  = rect.width  * window.devicePixelRatio;
+    sigCanvas.height = 180 * window.devicePixelRatio;
+    sigCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    sigCtx.strokeStyle = '#e6edf3';
+    sigCtx.lineWidth   = 2.5;
+    sigCtx.lineCap     = 'round';
+    sigCtx.lineJoin    = 'round';
+  }
+  resize(); window.addEventListener('resize', resize);
+
+  function getPos(e) {
+    const r = sigCanvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: src.clientX - r.left, y: src.clientY - r.top };
+  }
+  sigCanvas.addEventListener('mousedown',  e => { sigDrawing=true; const p=getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); onSigStart(); });
+  sigCanvas.addEventListener('mousemove',  e => { if(!sigDrawing)return; const p=getPos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); });
+  sigCanvas.addEventListener('mouseup',    () => { sigDrawing=false; onSigEnd(); });
+  sigCanvas.addEventListener('touchstart', e => { e.preventDefault(); sigDrawing=true; const p=getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); onSigStart(); }, {passive:false});
+  sigCanvas.addEventListener('touchmove',  e => { e.preventDefault(); if(!sigDrawing)return; const p=getPos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); }, {passive:false});
+  sigCanvas.addEventListener('touchend',   () => { sigDrawing=false; onSigEnd(); });
+}
+
+function onSigStart() { $('sig-hint').classList.add('hidden'); sigHasMark=false; }
+function onSigEnd()   { sigHasMark=true; S.sigDataUrl=sigCanvas.toDataURL('image/png'); $('btn-next3').disabled=false; }
+function clearSig()   { sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); sigHasMark=false; S.sigDataUrl=null; $('sig-hint').classList.remove('hidden'); $('btn-next3').disabled=true; }
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function setStep(n){[1,2,3,4].forEach(i=>{const el=$('step'+i);el.classList.remove('active','done');if(i<n)el.classList.add('done');else if(i===n)el.classList.add('active');});}
+
+function goStep1() {
+  stopLive();
+  ['sec-verify','sec-sign','sec-confirm'].forEach(id=>$(id).classList.add('hidden'));
+  $('sec-search').classList.remove('hidden');
+  setStep(1); clearSbar();
+}
+
+function goStep2() {
+  if (!S.pkg) { setSbar('error','❌ ยังไม่ได้ค้นหาพัสดุ'); return; }
+  if (S.pkg.status !== 'รอรับ') { setSbar('error','❌ พัสดุนี้รับไปแล้ว'); return; }
+  $('sec-search').classList.add('hidden'); $('sec-sign').classList.add('hidden'); $('sec-confirm').classList.add('hidden');
+  $('sec-verify').classList.remove('hidden');
+  setStep(2); clearSbar();
+}
+
+function goStep3() {
+  // รับ TG Chat ID จาก manual ถ้ามี
+  const manualId = ($('tg-chatid-input').value || '').trim();
+  if (manualId) S.tgChatId = manualId;
+  $('sec-verify').classList.add('hidden'); $('sec-confirm').classList.add('hidden');
+  $('sec-sign').classList.remove('hidden');
+  setStep(3); clearSbar();
+}
+
+function goStep4() {
+  if (!S.sigDataUrl) { setSbar('error','❌ กรุณาลงลายเซ็นก่อน'); return; }
+  $('c-id').textContent       = S.pkg.packageId;
+  $('c-tracking').textContent = S.pkg.trackingNumber;
+  $('c-name').textContent     = S.pkg.recipientName;
+  $('c-phone').textContent    = S.pkg.phone;
+  $('c-sig').src              = S.sigDataUrl;
+  $('sec-sign').classList.add('hidden');
+  $('sec-confirm').classList.remove('hidden');
+  const btn=$('btn-submit');btn.disabled=false;btn.textContent='📬 ยืนยันจ่ายพัสดุ';S.submitting=false;
+  clearSbar2(); setStep(4);
+}
+
+// ============================================================
+// SUBMIT
+// ============================================================
+async function submitPickup() {
+  if (S.submitting) return;
+  S.submitting = true;
+  const btn = $('btn-submit');
+  btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+  clearSbar2();
+  try {
+    // แปลง signature เป็น base64 ลบ prefix
+    const sigBase64 = S.sigDataUrl ? S.sigDataUrl.split(',')[1] : null;
+    const result = await callGAS('pickup_package', {
+      userId:        S.adminUserId,
+      packageId:     S.pkg.packageId,
+      signatureBase64: sigBase64,
+      tgChatId:      S.tgChatId || '',
+      adminName:     S.adminName,
+    }, 90000);
+
+    $('ok-packageid').textContent  = S.pkg.packageId;
+    $('ok-recipient').textContent  = `✅ จ่ายให้: ${S.pkg.recipientName}\nเลขพัสดุ: ${S.pkg.trackingNumber}`;
+    if (result && result.tgSent) {
+      $('ok-tg-status').style.display = '';
+      $('ok-tg-status').textContent   = '📨 แจ้งเตือน Telegram ผู้รับสำเร็จ ✅';
+    }
+    show('ov-ok');
+  } catch(e) {
+    setSbar2('error','❌ บันทึกไม่สำเร็จ: '+e.message);
+    btn.disabled=false; btn.textContent='📬 ยืนยันจ่ายพัสดุ';
+  } finally {
+    S.submitting = false;
+  }
+}
+
+// ============================================================
+// RESET
+// ============================================================
+function resetAll() {
+  S.pkg=null; S.sigDataUrl=null; S.tgChatId=''; S.submitting=false;
+  stopLive();
+  $('search-input').value='';
+  $('tg-chatid-input').value='';
+  clearSig();
+  show('main'); goStep1();
+}
+
+// ============================================================
+// GAS CALL
+// ============================================================
+async function callGAS(action, extra, timeoutMs=60000) {
+  const ctrl=new AbortController(), tid=setTimeout(()=>ctrl.abort(),timeoutMs);
+  try {
+    const resp = await fetch(GAS_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action,...extra}),
+      redirect:'follow', signal:ctrl.signal,
+    });
+    clearTimeout(tid);
+    if (!resp.ok) throw new Error('GAS HTTP '+resp.status);
+    const text = await resp.text();
+    let data; try { data=JSON.parse(text); } catch(_) { throw new Error('GAS ตอบผิดรูปแบบ'); }
+    if (data.status==='error') throw new Error(data.message||action+' ล้มเหลว');
+    return data.result!==undefined ? data.result : data;
+  } catch(e) { clearTimeout(tid); if(e.name==='AbortError') throw new Error('หมดเวลาเชื่อมต่อ'); throw e; }
+}
+
+// ============================================================
+// SBAR
+// ============================================================
+function setSbar(type,text){const b=$('sbar');b.className='sbar '+type;b.classList.remove('hidden');$('sbar-icon').textContent={error:'❌',success:'✅',info:'ℹ️',warning:'⚠️'}[type]||'ℹ️';$('sbar-txt').textContent=text;}
+function clearSbar(){$('sbar').classList.add('hidden');}
+function setSbar2(type,text){const b=$('sbar2');b.className='sbar '+type;b.classList.remove('hidden');$('sbar2-icon').textContent={error:'❌',success:'✅',info:'ℹ️',warning:'⚠️'}[type]||'ℹ️';$('sbar2-txt').textContent=text;}
+function clearSbar2(){$('sbar2').classList.add('hidden');}
+
+window.onerror=function(msg,_,line){$('load-txt').textContent='❌ '+msg+' L'+line;};
+setTimeout(function(){const ov=$('ov-load');if(ov&&!ov.classList.contains('hidden'))$('load-txt').textContent='⏱️ โหลดนาน — ลองปิดแล้วเปิดใหม่';},30000);
+
+init();
+</script>
+</body>
+</html>
