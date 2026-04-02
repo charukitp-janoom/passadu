@@ -12,6 +12,7 @@
     --surface:#161b22; --surface2:#21262d; --border:#30363d;
     --text:#e6edf3; --muted:#7d8590; --red:#f85149;
     --yellow:#d29922; --green:#00c853; --purple:#a78bfa;
+    --tg:#229ED9; --tg-dark:#1a7fad;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
@@ -90,23 +91,42 @@
   .sbar.warning{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);color:var(--yellow)}
 
   /* BUTTONS */
-  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:none;border-radius:12px;font-family:'Sarabun',sans-serif;font-size:16px;font-weight:700;cursor:pointer;transition:all .2s;-webkit-appearance:none}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:none;border-radius:12px;font-family:'Sarabun',sans-serif;font-size:16px;font-weight:700;cursor:pointer;transition:all .2s;-webkit-appearance:none;text-decoration:none}
   .btn:active{transform:scale(.97)}
   .btn-primary{background:var(--blue);color:#fff}
   .btn-primary:hover{background:var(--blue-dark)}
   .btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
   .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-tg{background:var(--tg);color:#fff}
+  .btn-tg:hover{background:var(--tg-dark)}
+  .btn-tg:disabled{opacity:.4;cursor:not-allowed;transform:none}
   .btn-row{display:flex;gap:8px}
   .btn-row .btn-back{flex:0 0 auto;width:auto;padding:15px 20px;font-size:14px}
 
   /* SUCCESS OV extras */
   .success-name{font-size:22px;font-weight:700;color:var(--green);margin-bottom:4px}
   .success-phone{font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--muted)}
-  .success-tip{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.8;text-align:left;max-width:320px;width:100%}
-  .success-tip b{color:var(--blue)}
 
   /* EXISTING BADGE */
   .existing-badge{background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.35);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--purple);display:flex;gap:8px;align-items:flex-start}
+
+  /* TELEGRAM STEP */
+  .tg-card{background:linear-gradient(135deg,rgba(34,158,217,.12),rgba(34,158,217,.04));border:1.5px solid rgba(34,158,217,.35);border-radius:16px;padding:24px 20px;text-align:center;margin-bottom:16px}
+  .tg-icon{font-size:60px;margin-bottom:12px}
+  .tg-title{font-size:18px;font-weight:700;color:var(--tg);margin-bottom:8px}
+  .tg-desc{font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:20px}
+  .tg-steps{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:left;margin-bottom:20px}
+  .tg-steps-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+  .tg-step-row{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)}
+  .tg-step-row:last-child{border-bottom:none;padding-bottom:0}
+  .tg-step-num{width:24px;height:24px;background:rgba(34,158,217,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--tg);flex-shrink:0;margin-top:1px}
+  .tg-step-txt{font-size:13px;line-height:1.6;color:var(--text)}
+  .tg-step-txt b{color:var(--tg)}
+  .tg-status-badge{border-radius:10px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:16px}
+  .tg-status-badge.linked{background:rgba(0,200,83,.1);border:1px solid rgba(0,200,83,.3);color:var(--green)}
+  .tg-status-badge.pending{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);color:var(--yellow)}
+  .tg-status-badge.hidden{display:none}
+  .tg-skip{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;cursor:pointer;text-decoration:underline}
 
   @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.7}}
@@ -123,18 +143,16 @@
 
 <div id="ov-ok" class="ov hidden">
   <div class="ov-icon ok">✅</div>
-  <div class="ov-title green" id="ok-title">ลงทะเบียนสำเร็จ!</div>
+  <div class="ov-title green">ลงทะเบียนสำเร็จ!</div>
   <div class="success-name" id="ok-name">—</div>
   <div class="success-phone" id="ok-phone">—</div>
-  <div class="success-tip">
-    ระบบจะแจ้งเตือนผ่าน LINE เมื่อมีพัสดุมาถึง 📦<br><br>
-    💡 <b>รับแจ้งเตือนทาง Telegram ด้วย:</b><br>
-    1. เปิด Telegram → ค้นหา <b>@userinfobot</b><br>
-    2. กด Start → Copy หมายเลข ID<br>
-    3. กลับมาพิมพ์ใน LINE ว่า<br>
-    &nbsp;&nbsp;&nbsp;<b>ผูก TG &lt;หมายเลข ID&gt;</b>
-  </div>
-  <button class="btn btn-primary" style="max-width:260px" onclick="liff.closeWindow()">✔️ เสร็จสิ้น</button>
+  <div style="font-size:13px;color:var(--muted);margin-top:4px">เชื่อมต่อ Telegram เพื่อรับแจ้งเตือนพัสดุ</div>
+  <button class="btn btn-primary" style="max-width:260px;margin-top:8px" onclick="goTelegramStep()">
+    ✈️ ไปขั้นตอนถัดไป →
+  </button>
+  <button class="btn btn-secondary" style="max-width:260px" onclick="liff.closeWindow()">
+    ข้ามไปก่อน
+  </button>
 </div>
 
 <div class="hdr">
@@ -150,6 +168,7 @@
   <div class="steps">
     <div class="step active" id="step1"><span class="step-num">1</span>ข้อมูล</div>
     <div class="step"        id="step2"><span class="step-num">2</span>ยืนยัน</div>
+    <div class="step"        id="step3"><span class="step-num">3</span>Telegram</div>
   </div>
 
   <div class="sbar hidden" id="sbar">
@@ -162,13 +181,12 @@
     <div class="welcome">
       <div class="welcome-icon">📦</div>
       <div class="welcome-title">ระบบแจ้งเตือนพัสดุ</div>
-      <div class="welcome-sub">ลงทะเบียนครั้งเดียว ระบบจะแจ้งเตือนอัตโนมัติ<br>เมื่อมีพัสดุมาถึงและพร้อมรับ</div>
+      <div class="welcome-sub">ลงทะเบียนครั้งเดียว ระบบจะแจ้งเตือน Telegram อัตโนมัติ<br>เมื่อมีพัสดุมาถึงและพร้อมรับ</div>
     </div>
 
     <div class="card">
       <div class="card-hdr">👤 ยศ-ชื่อ</div>
       <div class="card-body">
-        <!-- ยศ pill picker -->
         <div class="field">
           <div class="field-label">ยศ <span class="req">*</span></div>
           <div class="rank-grid" id="rank-grid">
@@ -187,7 +205,6 @@
           </div>
         </div>
 
-        <!-- ชื่อ -->
         <div class="field">
           <div class="field-label">ชื่อ-สกุล <span class="req">*</span></div>
           <input type="text" id="f-name" placeholder="เช่น สมชาย ใจดี" autocomplete="name"
@@ -249,25 +266,79 @@
     </div>
   </div>
 
+  <!-- ====== STEP 3: ผูก Telegram ====== -->
+  <div id="sec-telegram" class="hidden">
+
+    <div class="tg-card">
+      <div class="tg-icon">✈️</div>
+      <div class="tg-title">ผูก Telegram เพื่อรับแจ้งเตือน</div>
+      <div class="tg-desc">
+        พัสดุถึงแล้ว → แจ้งเตือน Telegram ทันที<br>
+        กดปุ่มด้านล่าง <b>1 ครั้ง</b> แล้วกด <b>Start</b> ใน Telegram<br>
+        ระบบจะผูกเบอร์โทรให้อัตโนมัติ
+      </div>
+
+      <!-- สถานะการผูก (ตรวจสอบหลังกลับมา) -->
+      <div id="tg-linked-badge" class="tg-status-badge linked hidden">
+        ✅ ผูก Telegram สำเร็จแล้ว! พร้อมรับแจ้งเตือน
+      </div>
+      <div id="tg-pending-badge" class="tg-status-badge pending hidden">
+        ⏳ รอการยืนยันจาก Telegram Bot...
+      </div>
+
+      <a id="btn-open-tg" href="#" class="btn btn-tg" onclick="openTelegram(event)">
+        ✈️ เปิด Telegram เพื่อผูกบัญชี
+      </a>
+    </div>
+
+    <div class="tg-steps">
+      <div class="tg-steps-title">📋 วิธีการผูก (3 ขั้นตอน)</div>
+      <div class="tg-step-row">
+        <div class="tg-step-num">1</div>
+        <div class="tg-step-txt">กดปุ่ม <b>เปิด Telegram</b> ด้านบน</div>
+      </div>
+      <div class="tg-step-row">
+        <div class="tg-step-num">2</div>
+        <div class="tg-step-txt">กดปุ่ม <b>START</b> ใน Telegram (ไม่ต้องพิมพ์อะไร)</div>
+      </div>
+      <div class="tg-step-row">
+        <div class="tg-step-num">3</div>
+        <div class="tg-step-txt">กลับมาที่หน้านี้ — ระบบจะตรวจสอบสถานะให้อัตโนมัติ</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-check-tg" onclick="checkTGStatus()" style="display:none">
+      🔄 ตรวจสอบสถานะ
+    </button>
+
+    <button class="btn btn-primary" id="btn-done" onclick="liff.closeWindow()" style="display:none">
+      ✔️ เสร็จสิ้น
+    </button>
+
+    <div class="tg-skip" onclick="liff.closeWindow()">ข้ามขั้นตอนนี้ (ผูกทีหลังได้)</div>
+  </div>
+
 </div>
 
 <script>
 // ============================================================
 // CONFIG
 // ============================================================
-const LIFF_ID = '2009243376-REGISTER0';  // << เปลี่ยนเป็น LIFF ID ของหน้าลงทะเบียน
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec';
+const LIFF_ID  = '2009243376-7UDEepnC';  // << เปลี่ยนเป็น LIFF ID ของหน้าลงทะเบียน
+const GAS_URL  = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMAmCE41tZDn_TFK705CTXWiF5vV5UewKPAbdP7dFCiIZUP4JQ/exec';
+const TG_BOT   = 'pasadu_notify_bot';     // << username Bot ไม่มี @
 
 // ============================================================
 // STATE
 // ============================================================
 const S = {
   userId: '', displayName: '', pictureUrl: '',
-  rank: '',          // ยศที่เลือก
-  name: '',          // ชื่อ-สกุล (ไม่มียศ)
+  rank: '',
+  name: '',
   phone: '',
-  existingRecord: null,  // ข้อมูลเดิมถ้าเคยลงทะเบียนแล้ว
+  existingRecord: null,
   submitting: false,
+  tgOpened: false,
 };
 const $ = id => document.getElementById(id);
 
@@ -284,23 +355,20 @@ async function init() {
     S.pictureUrl  = p.pictureUrl || '';
     setLoad('กำลังตรวจสอบข้อมูล...');
 
-    // ดึงข้อมูลเดิม (ถ้ามี)
     try {
       const existing = await callGAS('get_registration', { userId: p.userId });
       if (existing && existing.phone) {
         S.existingRecord = existing;
-        // pre-fill
         S.phone = existing.phone;
         $('f-phone').value = existing.phone;
         onPhoneInput();
-        // แยกยศออกจากชื่อ
         const { rank, name } = splitRankName(existing.ownerName || '');
         if (rank) selectRankByValue(rank);
         if (name) $('f-name').value = name;
         S.name = name;
         checkForm();
       }
-    } catch(_) { /* ยังไม่มีข้อมูล ปกติ */ }
+    } catch(_) {}
 
     show('main');
   } catch(e) {
@@ -335,13 +403,10 @@ function selectRankByValue(rank) {
   });
 }
 
-// แยกยศออกจากชื่อเต็ม เช่น "จ.ส.อ. สมชาย ใจดี" → {rank:"จ.ส.อ.", name:"สมชาย ใจดี"}
 function splitRankName(fullName) {
   const ranks = ['พลทหาร','พลฯ อส.','ส.ต.','ส.ท.','ส.อ.','จ.ส.ต.','จ.ส.ท.','จ.ส.อ.','ร.ต.','ร.ท.','ร.อ.'];
   for (const r of ranks) {
-    if (fullName.startsWith(r)) {
-      return { rank: r, name: fullName.replace(r, '').trim() };
-    }
+    if (fullName.startsWith(r)) return { rank: r, name: fullName.replace(r, '').trim() };
   }
   return { rank: '', name: fullName };
 }
@@ -383,7 +448,7 @@ function checkForm() {
 // NAVIGATION
 // ============================================================
 function setStep(n) {
-  [1,2].forEach(i => {
+  [1,2,3].forEach(i => {
     const el = $('step'+i);
     el.classList.remove('active','done');
     if (i < n) el.classList.add('done');
@@ -406,7 +471,6 @@ function goConfirm() {
   $('c-phone').textContent    = phone;
   $('c-line').textContent     = S.displayName;
 
-  // แสดง notice ถ้ามีข้อมูลเดิม
   if (S.existingRecord) {
     $('existing-txt').textContent =
       `คุณเคยลงทะเบียนไว้แล้วในชื่อ "${S.existingRecord.ownerName}" เบอร์ ${S.existingRecord.phone} — การบันทึกนี้จะอัปเดตข้อมูลให้ใหม่`;
@@ -446,7 +510,6 @@ async function submitReg() {
       phone:     S.phone,
     });
 
-    $('ok-title').textContent = S.existingRecord ? 'อัปเดตข้อมูลสำเร็จ!' : 'ลงทะเบียนสำเร็จ!';
     $('ok-name').textContent  = fullName;
     $('ok-phone').textContent = S.phone;
     show('ov-ok');
@@ -456,6 +519,59 @@ async function submitReg() {
     btn.textContent = '🪖 ยืนยันลงทะเบียน';
   } finally {
     S.submitting = false;
+  }
+}
+
+// ============================================================
+// STEP 3: TELEGRAM DEEP LINK
+// สร้าง deep link: https://t.me/<bot>?start=phone_<phone>
+// Bot จะได้รับ: /start phone_0801234567
+// Code.gs จะ parse และบันทึก chatId → phone ทันที
+// ============================================================
+function goTelegramStep() {
+  // ซ่อน overlay
+  $('ov-ok').classList.add('hidden');
+  // ซ่อน sec-confirm (ถ้ายังแสดงอยู่)
+  $('sec-confirm').classList.add('hidden');
+  // แสดง telegram step
+  $('sec-telegram').classList.remove('hidden');
+  setStep(3);
+  // ตั้ง deep link URL พร้อมเบอร์
+  const deepLink = `https://t.me/${TG_BOT}?start=phone_${S.phone}`;
+  $('btn-open-tg').href = deepLink;
+}
+
+function openTelegram(e) {
+  e.preventDefault();
+  S.tgOpened = true;
+  const deepLink = `https://t.me/${TG_BOT}?start=phone_${S.phone}`;
+  // เปิด Telegram
+  window.open(deepLink, '_blank');
+  // แสดง badge pending + ปุ่มตรวจสอบ
+  $('tg-pending-badge').classList.remove('hidden');
+  $('btn-check-tg').style.display = 'flex';
+  // auto-check หลัง 5 วินาที
+  setTimeout(checkTGStatus, 5000);
+}
+
+async function checkTGStatus() {
+  const btn = $('btn-check-tg');
+  btn.disabled = true;
+  btn.textContent = '⏳ กำลังตรวจสอบ...';
+  try {
+    const res = await callGAS('check_tg_linked', { phone: S.phone });
+    if (res && res.linked) {
+      $('tg-pending-badge').classList.add('hidden');
+      $('tg-linked-badge').classList.remove('hidden');
+      btn.style.display = 'none';
+      $('btn-done').style.display = 'flex';
+    } else {
+      btn.disabled = false;
+      btn.textContent = '🔄 ตรวจสอบสถานะอีกครั้ง';
+    }
+  } catch(_) {
+    btn.disabled = false;
+    btn.textContent = '🔄 ตรวจสอบสถานะอีกครั้ง';
   }
 }
 
