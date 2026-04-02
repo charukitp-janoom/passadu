@@ -127,13 +127,6 @@
   .sbar.info{background:rgba(56,139,253,.1);border:1px solid rgba(56,139,253,.3);color:var(--blue)}
   .sbar.warning{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);color:var(--yellow)}
 
-  /* SIG PAD */
-  .sig-wrap{border:2px dashed var(--border);border-radius:12px;overflow:hidden;background:var(--surface2);position:relative}
-  .sig-wrap canvas{display:block;width:100%;touch-action:none}
-  .sig-clear{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif}
-  .sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--muted);pointer-events:none;text-align:center;transition:opacity .3s}
-  .sig-hint.hidden{opacity:0}
-
   /* CONFIRM TABLE */
   .confirm-panel{background:var(--surface);border:1px solid rgba(249,115,22,.3);border-radius:16px;overflow:hidden;margin-bottom:16px}
   .confirm-hdr{padding:14px 16px;background:rgba(249,115,22,.1);border-bottom:1px solid rgba(249,115,22,.2);font-weight:700;font-size:14px;color:var(--orange)}
@@ -208,9 +201,6 @@
   <button class="btn btn-primary"   style="max-width:240px" onclick="liff.closeWindow()">✔️ ปิดและกลับสู่แชท</button>
 </div>
 
-<!-- hidden inputs -->
-<input type="file" id="sig-input" accept="image/*" class="hidden">
-
 <div class="hdr">
   <div class="hdr-icon">📬</div>
   <div>
@@ -230,8 +220,7 @@
   <div class="steps">
     <div class="step active" id="step1"><span class="step-num">1</span>ค้นหา</div>
     <div class="step"        id="step2"><span class="step-num">2</span>ตรวจสอบ</div>
-    <div class="step"        id="step3"><span class="step-num">3</span>ลายเซ็น</div>
-    <div class="step"        id="step4"><span class="step-num">4</span>ยืนยัน</div>
+    <div class="step"        id="step3"><span class="step-num">3</span>ยืนยัน</div>
   </div>
 
   <div class="sbar hidden" id="sbar">
@@ -303,31 +292,11 @@
     </div>
     <div class="btn-row">
       <button class="btn btn-secondary btn-back" onclick="goStep1()">← กลับ</button>
-      <button class="btn btn-primary" onclick="goStep3()">ถัดไป: ลายเซ็น ➜</button>
+      <button class="btn btn-primary" onclick="goConfirm()">ถัดไป: ยืนยัน ➜</button>
     </div>
   </div>
 
-  <!-- ====== STEP 3: ลายเซ็นรับพัสดุ ====== -->
-  <div id="sec-sign" class="hidden">
-    <div class="card">
-      <div class="card-hdr">✍️ ขั้นตอนที่ 3 — ลายเซ็นรับพัสดุ</div>
-      <div class="card-body">
-        <div style="font-size:13px;color:var(--muted)">ให้ผู้รับลงลายเซ็นในกล่องด้านล่างนี้</div>
-        <div class="sig-wrap">
-          <canvas id="sig-canvas" height="180"></canvas>
-          <span class="sig-hint" id="sig-hint">✍️ ลงลายเซ็นที่นี่</span>
-          <button class="sig-clear" onclick="clearSig()">ล้าง</button>
-        </div>
-        <div style="font-size:11px;color:var(--muted);text-align:center">ใช้นิ้วหรือ stylus ลากลายเซ็น</div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-secondary btn-back" onclick="goStep2()">← กลับ</button>
-      <button class="btn btn-primary" id="btn-next3" onclick="goStep4()" disabled>ถัดไป: ยืนยัน ➜</button>
-    </div>
-  </div>
-
-  <!-- ====== STEP 4: ยืนยัน ====== -->
+  <!-- ====== STEP 3: ยืนยัน ====== -->
   <div id="sec-confirm" class="hidden">
     <div class="confirm-panel">
       <div class="confirm-hdr">✅ ยืนยันการจ่ายพัสดุ</div>
@@ -335,14 +304,11 @@
       <div class="confirm-row"><div class="confirm-key">เลขพัสดุ</div><div class="confirm-val mono" id="c-tracking">—</div></div>
       <div class="confirm-row"><div class="confirm-key">ผู้รับ</div><div class="confirm-val" id="c-name">—</div></div>
       <div class="confirm-row"><div class="confirm-key">เบอร์โทร</div><div class="confirm-val mono" id="c-phone">—</div></div>
-      <div class="confirm-row"><div class="confirm-key">ลายเซ็น</div>
-        <div class="confirm-val"><img id="c-sig" src="" style="max-width:100%;border-radius:6px;background:var(--surface2);max-height:80px" alt="ลายเซ็น"></div>
-      </div>
       <div class="confirm-row"><div class="confirm-key">จ่ายโดย</div><div class="confirm-val" id="c-admin">—</div></div>
     </div>
     <div class="sbar hidden" id="sbar2"><span id="sbar2-icon">ℹ️</span><span id="sbar2-txt"></span></div>
     <div class="btn-row">
-      <button class="btn btn-secondary btn-back" onclick="goStep3()">← กลับ</button>
+      <button class="btn btn-secondary btn-back" onclick="goStep2()">← กลับ</button>
       <button class="btn btn-primary" id="btn-submit" onclick="submitPickup()">📬 ยืนยันจ่ายพัสดุ</button>
     </div>
   </div>
@@ -378,7 +344,6 @@ const GAS_URL  = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMA
 const S = {
   adminName:'', adminUserId:'', adminType:'',
   pkg: null,           // ข้อมูลพัสดุที่ค้นพบ
-  sigDataUrl: null,    // ลายเซ็น base64
   tgChatId: '',        // Telegram Chat ID ของผู้รับ
   qrScanner: null,
   qrRunning:  false,   // กล้องกำลัง scan อยู่
@@ -417,7 +382,6 @@ async function init() {
     $('c-admin').textContent = p.displayName;
     show('main');
     // ไม่ต้อง new Html5Qrcode ตรงนี้ — สร้างใหม่ทุกครั้งที่ startLive() เพื่อหลีกเลี่ยง DOM conflict
-    initSigPad();
   } catch(e) {
     setLoad('❌ ' + e.message);
     setTimeout(() => show('main'), 1500);
@@ -612,51 +576,13 @@ function fillPkgCard(pkg) {
 }
 
 // ============================================================
-// SIGNATURE PAD
-// ============================================================
-let sigCanvas, sigCtx, sigDrawing = false, sigHasMark = false;
-
-function initSigPad() {
-  sigCanvas = $('sig-canvas');
-  sigCtx    = sigCanvas.getContext('2d');
-  // ปรับขนาด canvas ให้ตรงกับ CSS
-  function resize() {
-    const rect = sigCanvas.getBoundingClientRect();
-    sigCanvas.width  = rect.width  * window.devicePixelRatio;
-    sigCanvas.height = 180 * window.devicePixelRatio;
-    sigCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    sigCtx.strokeStyle = '#e6edf3';
-    sigCtx.lineWidth   = 2.5;
-    sigCtx.lineCap     = 'round';
-    sigCtx.lineJoin    = 'round';
-  }
-  resize(); window.addEventListener('resize', resize);
-
-  function getPos(e) {
-    const r = sigCanvas.getBoundingClientRect();
-    const src = e.touches ? e.touches[0] : e;
-    return { x: src.clientX - r.left, y: src.clientY - r.top };
-  }
-  sigCanvas.addEventListener('mousedown',  e => { sigDrawing=true; const p=getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); onSigStart(); });
-  sigCanvas.addEventListener('mousemove',  e => { if(!sigDrawing)return; const p=getPos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); });
-  sigCanvas.addEventListener('mouseup',    () => { sigDrawing=false; onSigEnd(); });
-  sigCanvas.addEventListener('touchstart', e => { e.preventDefault(); sigDrawing=true; const p=getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); onSigStart(); }, {passive:false});
-  sigCanvas.addEventListener('touchmove',  e => { e.preventDefault(); if(!sigDrawing)return; const p=getPos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); }, {passive:false});
-  sigCanvas.addEventListener('touchend',   () => { sigDrawing=false; onSigEnd(); });
-}
-
-function onSigStart() { $('sig-hint').classList.add('hidden'); sigHasMark=false; }
-function onSigEnd()   { sigHasMark=true; S.sigDataUrl=sigCanvas.toDataURL('image/png'); $('btn-next3').disabled=false; }
-function clearSig()   { sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); sigHasMark=false; S.sigDataUrl=null; $('sig-hint').classList.remove('hidden'); $('btn-next3').disabled=true; }
-
-// ============================================================
 // NAVIGATION
 // ============================================================
-function setStep(n){[1,2,3,4].forEach(i=>{const el=$('step'+i);el.classList.remove('active','done');if(i<n)el.classList.add('done');else if(i===n)el.classList.add('active');});}
+function setStep(n){[1,2,3].forEach(i=>{const el=$('step'+i);el.classList.remove('active','done');if(i<n)el.classList.add('done');else if(i===n)el.classList.add('active');});}
 
 async function goStep1() {
   await stopLive();
-  ['sec-verify','sec-sign','sec-confirm'].forEach(id=>$(id).classList.add('hidden'));
+  ['sec-verify','sec-confirm'].forEach(id=>$(id).classList.add('hidden'));
   $('sec-search').classList.remove('hidden');
   setStep(1); clearSbar();
 }
@@ -664,31 +590,23 @@ async function goStep1() {
 function goStep2() {
   if (!S.pkg) { setSbar('error','❌ ยังไม่ได้ค้นหาพัสดุ'); return; }
   if (S.pkg.status !== 'รอรับ') { setSbar('error','❌ พัสดุนี้รับไปแล้ว'); return; }
-  $('sec-search').classList.add('hidden'); $('sec-sign').classList.add('hidden'); $('sec-confirm').classList.add('hidden');
+  $('sec-search').classList.add('hidden'); $('sec-confirm').classList.add('hidden');
   $('sec-verify').classList.remove('hidden');
   setStep(2); clearSbar();
 }
 
-function goStep3() {
+function goConfirm() {
   // รับ TG Chat ID จาก manual ถ้ามี
   const manualId = ($('tg-chatid-input').value || '').trim();
   if (manualId) S.tgChatId = manualId;
-  $('sec-verify').classList.add('hidden'); $('sec-confirm').classList.add('hidden');
-  $('sec-sign').classList.remove('hidden');
-  setStep(3); clearSbar();
-}
-
-function goStep4() {
-  if (!S.sigDataUrl) { setSbar('error','❌ กรุณาลงลายเซ็นก่อน'); return; }
   $('c-id').textContent       = S.pkg.packageId;
   $('c-tracking').textContent = S.pkg.trackingNumber;
   $('c-name').textContent     = S.pkg.recipientName;
   $('c-phone').textContent    = S.pkg.phone;
-  $('c-sig').src              = S.sigDataUrl;
-  $('sec-sign').classList.add('hidden');
+  $('sec-verify').classList.add('hidden');
   $('sec-confirm').classList.remove('hidden');
   const btn=$('btn-submit');btn.disabled=false;btn.textContent='📬 ยืนยันจ่ายพัสดุ';S.submitting=false;
-  clearSbar2(); setStep(4);
+  clearSbar2(); setStep(3);
 }
 
 // ============================================================
@@ -701,12 +619,9 @@ async function submitPickup() {
   btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
   clearSbar2();
   try {
-    // แปลง signature เป็น base64 ลบ prefix
-    const sigBase64 = S.sigDataUrl ? S.sigDataUrl.split(',')[1] : null;
     const result = await callGAS('pickup_package', {
       userId:        S.adminUserId,
       packageId:     S.pkg.packageId,
-      signatureBase64: sigBase64,
       tgChatId:      S.tgChatId || '',
       adminName:     S.adminName,
     }, 90000);
@@ -743,7 +658,7 @@ async function switchTab(tab) {
     // ซ่อน steps + หยุดกล้อง + ซ่อนทุก section ของ search
     await stopLive();
     document.querySelector('.steps').classList.add('hidden');
-    ['sec-search','sec-verify','sec-sign','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
+    ['sec-search','sec-verify','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
     $('sbar').classList.add('hidden');
     $('sec-list').classList.remove('hidden');
     loadList(1);
@@ -839,7 +754,7 @@ async function selectFromList(pkgBasic) {
     });
     $('sec-list').classList.add('hidden');
     document.querySelector('.steps').classList.remove('hidden');
-    ['sec-search','sec-sign','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
+    ['sec-search','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
     $('sbar').classList.add('hidden');
     $('sec-verify').classList.remove('hidden');
     setStep(2);
@@ -854,11 +769,10 @@ async function selectFromList(pkgBasic) {
 // RESET
 // ============================================================
 async function resetAll() {
-  S.pkg=null; S.sigDataUrl=null; S.tgChatId=''; S.submitting=false; S.activeTab='search';
+  S.pkg=null; S.tgChatId=''; S.submitting=false; S.activeTab='search';
   await stopLive();
   $('search-input').value='';
   $('tg-chatid-input').value='';
-  clearSig();
   // reset tabs
   document.getElementById('tab-search-btn').classList.add('active');
   document.getElementById('tab-list-btn').classList.remove('active');
