@@ -377,12 +377,14 @@ const GAS_URL  = 'https://script.google.com/macros/s/AKfycbwy8AoWKvlT8JvV76UdiMA
 // ============================================================
 const S = {
   adminName:'', adminUserId:'', adminType:'',
-  pkg: null,          // ข้อมูลพัสดุที่ค้นพบ
-  sigDataUrl: null,   // ลายเซ็น base64
-  tgChatId: '',       // Telegram Chat ID ของผู้รับ
-  qrScanner: null, qrRunning: false,
+  pkg: null,           // ข้อมูลพัสดุที่ค้นพบ
+  sigDataUrl: null,    // ลายเซ็น base64
+  tgChatId: '',        // Telegram Chat ID ของผู้รับ
+  qrScanner: null,
+  qrRunning:  false,   // กล้องกำลัง scan อยู่
+  qrStarting: false,   // กำลัง init กล้อง (ป้องกัน double-start)
   submitting: false,
-  activeTab: 'search', // tab ปัจจุบัน
+  activeTab: 'search',
 };
 
 // State สำหรับ List Tab
@@ -414,7 +416,7 @@ async function init() {
     if (S.adminType === 'MAIN_ADMIN') $('badge-name').classList.add('main');
     $('c-admin').textContent = p.displayName;
     show('main');
-    S.qrScanner = new Html5Qrcode("qr-reader");
+    // ไม่ต้อง new Html5Qrcode ตรงนี้ — สร้างใหม่ทุกครั้งที่ startLive() เพื่อหลีกเลี่ยง DOM conflict
     initSigPad();
   } catch(e) {
     setLoad('❌ ' + e.message);
@@ -439,34 +441,115 @@ function setLoad(t) { $('load-txt').textContent = t; }
 // QR SCANNER
 // ============================================================
 async function startLive() {
-  if (!S.qrScanner) S.qrScanner = new Html5Qrcode("qr-reader");
-  $('qr-zone').style.display='none'; $('qr-spin').classList.add('show');
-  $('qr-spin-txt').textContent='กำลังเปิดกล้อง...';
+  // ป้องกันการกด scan ซ้ำขณะกล้องเปิดอยู่
+  if (S.qrRunning || S.qrStarting) return;
+  S.qrStarting = true;
+
+  $('qr-zone').style.display = 'none';
+  $('qr-spin').classList.add('show');
+  $('qr-spin-txt').textContent = 'กำลังเปิดกล้อง...';
+
   try {
+    // ทำลาย instance เก่าทิ้งก่อนเสมอ แล้วสร้างใหม่
+    // Html5Qrcode จะ inject DOM ลงใน qr-reader ทุกครั้ง ต้อง clear ก่อน
+    if (S.qrScanner) {
+      try {
+        if (S.qrScanner.isScanning) await S.qrScanner.stop();
+      } catch(_) {}
+      try { S.qrScanner.clear(); } catch(_) {}
+      S.qrScanner = null;
+    }
+    $('qr-reader').innerHTML = '';   // clear DOM เพื่อให้ inject ใหม่สะอาด
+    S.qrScanner = new Html5Qrcode('qr-reader');
+
     await S.qrScanner.start(
-      { facingMode:"environment" },
-      { fps:10, aspectRatio:1.0 },
-      (decoded) => { const t=parseId(decoded); if(t){stopLive();performSearch(t);} },
-      () => {}
+      { facingMode: 'environment' },
+      { fps: 10, aspectRatio: 1.0, disableFlip: false },
+      (decoded) => {
+        // callback นี้ถูกเรียกหลายครั้ง — guard ด้วย qrRunning
+        if (!S.qrRunning) return;
+        const t = parseId(decoded);
+        if (t) {
+          // หยุดกล้องแบบ fire-and-forget แล้วค้นหาเลย
+          S.qrRunning = false;
+          if (S.qrScanner && S.qrScanner.isScanning) {
+            S.qrScanner.stop().catch(() => {}).finally(() => {
+              $('qr-wrap').classList.remove('show');
+              $('qr-zone').style.display = '';
+            });
+          } else {
+            $('qr-wrap').classList.remove('show');
+            $('qr-zone').style.display = '';
+          }
+          performSearch(t);
+        }
+      },
+      () => {} // onError — ไม่ต้องทำอะไร (เกิดขึ้นทุก frame ที่อ่านไม่ได้)
     );
-    $('qr-wrap').classList.add('show'); $('qr-spin').classList.remove('show');
+
+    $('qr-wrap').classList.add('show');
+    $('qr-spin').classList.remove('show');
+    $('qr-status').textContent = 'กำลังค้นหาบาร์โค้ด...';
     S.qrRunning = true;
   } catch(err) {
-    $('qr-spin').classList.remove('show'); $('qr-zone').style.display='';
-    setSbar('warning','⚠️ เปิดกล้องไม่ได้ — กรุณาพิมพ์รหัสแทน');
+    $('qr-spin').classList.remove('show');
+    $('qr-zone').style.display = '';
+    setSbar('warning', '⚠️ เปิดกล้องไม่ได้: ' + err.message + ' — กรุณาพิมพ์รหัสแทน');
+  } finally {
+    S.qrStarting = false;
   }
 }
 
-function stopLive() {
+async function stopLive() {
   S.qrRunning = false;
-  if (S.qrScanner && S.qrScanner.isScanning) S.qrScanner.stop().catch(()=>{});
-  $('qr-wrap').classList.remove('show'); $('qr-spin').classList.remove('show');
-  $('qr-zone').style.display='';
+  $('qr-wrap').classList.remove('show');
+  $('qr-spin').classList.remove('show');
+  $('qr-zone').style.display = '';
+  if (S.qrScanner) {
+    try {
+      if (S.qrScanner.isScanning) await S.qrScanner.stop();
+    } catch(_) {}
+    try { S.qrScanner.clear(); } catch(_) {}
+    S.qrScanner = null;
+    $('qr-reader').innerHTML = '';
+  }
 }
 
 function parseId(raw) {
-  let t = (raw||'').trim();
-  if (t.startsWith('http')) { try{t=new URL(t).searchParams.get('id')||new URL(t).pathname.split('/').pop()||t;}catch(_){} }
+  let t = (raw || '').trim();
+
+  // 1. URL → ดึง tracking param หรือ path segment สุดท้าย
+  if (t.startsWith('http') || t.startsWith('//')) {
+    try {
+      const u = new URL(t.startsWith('//') ? 'https:' + t : t);
+      // ลอง query params ที่บริษัทขนส่งใช้บ่อย
+      const fromParam =
+        u.searchParams.get('track') ||
+        u.searchParams.get('trackingNumber') ||
+        u.searchParams.get('id') ||
+        u.searchParams.get('no') ||
+        u.searchParams.get('barcode');
+      if (fromParam && fromParam.length >= 4) return fromParam.trim();
+      // fallback: path segment สุดท้าย
+      const seg = u.pathname.split('/').filter(Boolean).pop() || '';
+      if (seg.length >= 4) return seg.trim();
+    } catch(_) {}
+    return null; // URL แต่ parse ไม่ได้ — ไม่ใช้
+  }
+
+  // 2. JSON string → ดึง field tracking
+  if (t.startsWith('{')) {
+    try {
+      const o = JSON.parse(t);
+      const v = o.tracking || o.trackingNumber || o.TrackingNumber || o.id || o.barcode || '';
+      if (v && String(v).length >= 4) return String(v).trim();
+    } catch(_) {}
+    return null;
+  }
+
+  // 3. ข้อความธรรมดา — เลขพัสดุ / รหัสพัสดุ
+  // ตัดช่องว่างและอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออก
+  t = t.replace(/[\s\r\n]+/g, '').toUpperCase();
   return t.length >= 4 ? t : null;
 }
 
@@ -480,7 +563,9 @@ function doSearch() {
 }
 
 async function performSearch(identifier) {
-  stopLive();
+  // ถ้ากล้องยังเปิดอยู่ (เรียกจาก doSearch ด้วยมือ) ให้หยุดก่อน
+  if (S.qrRunning) await stopLive();
+
   $('qr-spin').classList.add('show');
   $('qr-spin-txt').textContent = 'กำลังค้นหา...';
   clearSbar();
@@ -569,8 +654,8 @@ function clearSig()   { sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); 
 // ============================================================
 function setStep(n){[1,2,3,4].forEach(i=>{const el=$('step'+i);el.classList.remove('active','done');if(i<n)el.classList.add('done');else if(i===n)el.classList.add('active');});}
 
-function goStep1() {
-  stopLive();
+async function goStep1() {
+  await stopLive();
   ['sec-verify','sec-sign','sec-confirm'].forEach(id=>$(id).classList.add('hidden'));
   $('sec-search').classList.remove('hidden');
   setStep(1); clearSbar();
@@ -644,7 +729,7 @@ async function submitPickup() {
 // ============================================================
 // TAB SWITCHER
 // ============================================================
-function switchTab(tab) {
+async function switchTab(tab) {
   S.activeTab = tab;
   ['search','list'].forEach(t => {
     document.getElementById('tab-'+t+'-btn').classList.toggle('active', t===tab);
@@ -653,9 +738,10 @@ function switchTab(tab) {
     // แสดง steps bar + ส่วนค้นหา
     document.querySelector('.steps').classList.remove('hidden');
     ['sec-list'].forEach(id => $(id).classList.add('hidden'));
-    goStep1();
+    await goStep1();
   } else {
-    // ซ่อน steps + ซ่อนทุก section ของ search
+    // ซ่อน steps + หยุดกล้อง + ซ่อนทุก section ของ search
+    await stopLive();
     document.querySelector('.steps').classList.add('hidden');
     ['sec-search','sec-verify','sec-sign','sec-confirm'].forEach(id => $(id).classList.add('hidden'));
     $('sbar').classList.add('hidden');
@@ -767,9 +853,9 @@ async function selectFromList(pkgBasic) {
 // ============================================================
 // RESET
 // ============================================================
-function resetAll() {
+async function resetAll() {
   S.pkg=null; S.sigDataUrl=null; S.tgChatId=''; S.submitting=false; S.activeTab='search';
-  stopLive();
+  await stopLive();
   $('search-input').value='';
   $('tg-chatid-input').value='';
   clearSig();
