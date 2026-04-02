@@ -818,7 +818,8 @@ async function submitPackage() {
     // ── Step 1: บันทึกข้อมูลพัสดุผ่าน liff_submit (ช่องทางเดียว) ──
     btn.textContent = '⏳ กำลังบันทึกข้อมูล...';
     const res = await callGAS('liff_submit', {
-      userId: S.adminUserId, tracking, name, phone, type
+      userId: S.adminUserId, tracking, name, phone, type,
+      hasPhoto: !!S.pkgPhotoBase64
     });
     if (!res || !res.packageId) throw new Error('ไม่ได้รับ packageId จากระบบ');
     const packageId = res.packageId;
